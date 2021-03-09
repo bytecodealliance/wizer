@@ -9,10 +9,20 @@
 #ifndef _WIZER_H_
 #define _WIZER_H_
 
+#ifdef __wasi__
+#include <wasi/libc-environ.h>
+#endif
+
 #ifdef __cplusplus
 #define __WIZER_EXTERN_C extern "C"
 #else
 #define __WIZER_EXTERN_C extern
+#endif
+
+#ifdef __wasi__
+#define WIZER_RELOAD_ENV_VARS() __wasilibc_initialize_environ()
+#else
+#define WIZER_RELOAD_ENV_VARS()
 #endif
 
 /*
@@ -80,6 +90,11 @@
     /* This function replaces `_start` (the WASI-specified entry point) in  */ \
     /* the pre-initialized Wasm module.                                     */ \
     __attribute__((export_name("wizer.resume"))) void __wizer_resume() {       \
+        /* Call `__wasilibc_initialize_environ()` to reload environment     */ \
+        /* variables from the WASI environment. wasi-libc otherwise caches  */ \
+        /* them and may have cached environment variables present during    */ \
+        /* initialization. */                                                  \
+        WIZER_RELOAD_ENV_VARS();                                               \
         /* `__original_main()` is defined by the WASI SDK toolchain due to  */ \
         /* special semantics in C/C++ for the `main()` function, i.e., ito  */ \
         /* can either take argc/argv or not. It collects arguments using    */ \
