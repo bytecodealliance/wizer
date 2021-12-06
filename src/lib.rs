@@ -375,7 +375,7 @@ impl Wizer {
         config.wasm_reference_types(false);
         config.wasm_simd(false);
         config.wasm_threads(false);
-        config.wasm_bulk_memory(false);
+        config.wasm_bulk_memory(true);
 
         Ok(config)
     }
