@@ -33,7 +33,6 @@ const DEFAULT_INHERIT_ENV: bool = false;
 const DEFAULT_KEEP_INIT_FUNC: bool = false;
 const DEFAULT_WASM_MULTI_VALUE: bool = true;
 const DEFAULT_WASM_MULTI_MEMORY: bool = true;
-const DEFAULT_WASM_MODULE_LINKING: bool = false;
 const DEFAULT_WASM_BULK_MEMORY: bool = false;
 
 /// We only ever use `Store<T>` with a fixed `T` that is our optional WASI
@@ -194,12 +193,6 @@ pub struct Wizer {
     #[cfg_attr(feature = "structopt", structopt(long, value_name = "true|false"))]
     wasm_multi_value: Option<bool>,
 
-    /// Enable or disable the Wasm module-linking proposal.
-    ///
-    /// Disabled by default.
-    #[cfg_attr(feature = "structopt", structopt(long, value_name = "true|false"))]
-    wasm_module_linking: Option<bool>,
-
     /// Enable or disable Wasm bulk memory operations.
     ///
     /// Note that only `memory.copy`, `memory.fill`, and `memory.init` operations
@@ -225,7 +218,6 @@ impl std::fmt::Debug for Wizer {
             map_dirs,
             wasm_multi_memory,
             wasm_multi_value,
-            wasm_module_linking,
             wasm_bulk_memory,
         } = self;
         f.debug_struct("Wizer")
@@ -240,7 +232,6 @@ impl std::fmt::Debug for Wizer {
             .field("map_dirs", &map_dirs)
             .field("wasm_multi_memory", &wasm_multi_memory)
             .field("wasm_multi_value", &wasm_multi_value)
-            .field("wasm_module_linking", &wasm_module_linking)
             .field("wasm_bulk_memory", &wasm_bulk_memory)
             .finish()
     }
@@ -302,7 +293,6 @@ impl Wizer {
             map_dirs: vec![],
             wasm_multi_memory: None,
             wasm_multi_value: None,
-            wasm_module_linking: None,
             wasm_bulk_memory: None,
         }
     }
@@ -435,14 +425,6 @@ impl Wizer {
         self
     }
 
-    /// Enable or disable the Wasm module-linking proposal.
-    ///
-    /// Defaults to `false`.
-    pub fn wasm_module_linking(&mut self, enable: bool) -> &mut Self {
-        self.wasm_module_linking = Some(enable);
-        self
-    }
-
     /// Enable or disable Wasm bulk memory operations.
     ///
     /// Note that only `memory.copy`, `memory.fill`, and `memory.init`
@@ -547,9 +529,6 @@ impl Wizer {
             // Proposals that we support.
             multi_memory: self.wasm_multi_memory.unwrap_or(DEFAULT_WASM_MULTI_MEMORY),
             multi_value: self.wasm_multi_value.unwrap_or(DEFAULT_WASM_MULTI_VALUE),
-            module_linking: self
-                .wasm_module_linking
-                .unwrap_or(DEFAULT_WASM_MODULE_LINKING),
 
             // Proposals that we should add support for.
             reference_types: false,
@@ -560,6 +539,7 @@ impl Wizer {
             exceptions: false,
             extended_const: false,
             relaxed_simd: false,
+            component_model: false,
 
             // XXX: Though we don't fully support bulk memory yet, we
             // unconditionally turn it on.
@@ -594,8 +574,7 @@ impl Wizer {
     fn wasm_validate(&self, wasm: &[u8]) -> anyhow::Result<()> {
         log::debug!("Validating input Wasm");
 
-        let mut validator = wasmparser::Validator::new();
-        validator.wasm_features(self.wasm_features());
+        let mut validator = wasmparser::Validator::new_with_features(self.wasm_features());
         validator.validate_all(wasm)?;
 
         // Reject bulk memory stuff that manipulates state we don't
@@ -634,10 +613,7 @@ impl Wizer {
                         }
                     }
                 }
-                wasmparser::Payload::ModuleSectionEntry { parser, .. } => {
-                    parsers.push(parser);
-                }
-                wasmparser::Payload::End => {
+                wasmparser::Payload::End(_) => {
                     parsers.pop();
                 }
                 _ => continue,
