@@ -299,6 +299,21 @@ pub async fn initialize(
                 copy_component_section(section, component, &mut instrumented_component);
             }
 
+            Payload::ComponentExportSection(reader) => {
+                for export in reader {
+                    match export?.kind {
+                        ComponentExternalKind::Func => {
+                            function_count += 1;
+                        }
+                        ComponentExternalKind::Type => {
+                            type_count += 1;
+                        }
+                        _ => (),
+                    }
+                }
+                copy_component_section(section, component, &mut instrumented_component);
+            }
+
             Payload::ComponentTypeSection(reader) => {
                 for _ in reader {
                     type_count += 1;
