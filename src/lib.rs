@@ -16,8 +16,8 @@ use {
         NestedComponentSection, PrimitiveValType, RawSection, TypeSection, ValType,
     },
     wasmparser::{
-        CanonicalFunction, ComponentAlias, ComponentExternalKind, ExternalKind, Instance, Operator,
-        Parser, Payload, TypeRef, Validator, WasmFeatures,
+        CanonicalFunction, ComponentAlias, ComponentExternalKind, ComponentTypeRef, ExternalKind,
+        Instance, Operator, Parser, Payload, TypeRef, Validator, WasmFeatures,
     },
 };
 
@@ -292,6 +292,21 @@ pub async fn initialize(
                         }
                         CanonicalFunction::Lift { .. } => {
                             function_count += 1;
+                        }
+                        _ => (),
+                    }
+                }
+                copy_component_section(section, component, &mut instrumented_component);
+            }
+
+            Payload::ComponentImportSection(reader) => {
+                for import in reader {
+                    match import?.ty {
+                        ComponentTypeRef::Func(_) => {
+                            function_count += 1;
+                        }
+                        ComponentTypeRef::Type(_) => {
+                            type_count += 1;
                         }
                         _ => (),
                     }
