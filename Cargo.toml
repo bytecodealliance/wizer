@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.71"
-wasm-encoder = "0.29.0"
+wasm-encoder = "0.32.0"
 wasm-convert = { git = "https://github.com/dicej/wasm-convert" }
 async-trait = "0.1.68"
 futures = "0.3.28"
-wasmparser = "0.107.0"
+wasmparser = "0.112.0"

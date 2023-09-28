@@ -287,13 +287,15 @@ pub async fn initialize(
             Payload::ComponentCanonicalSection(reader) => {
                 for function in reader {
                     match function? {
-                        CanonicalFunction::Lower { .. } => {
+                        CanonicalFunction::Lower { .. }
+                        | CanonicalFunction::ResourceNew { .. }
+                        | CanonicalFunction::ResourceDrop { .. }
+                        | CanonicalFunction::ResourceRep { .. } => {
                             core_function_count += 1;
                         }
                         CanonicalFunction::Lift { .. } => {
                             function_count += 1;
                         }
-                        _ => (),
                     }
                 }
                 copy_component_section(section, component, &mut instrumented_component);
