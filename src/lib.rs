@@ -1,17 +1,19 @@
+#![deny(warnings)]
+
 use {
     anyhow::{bail, Context, Result},
     async_trait::async_trait,
     futures::future::BoxFuture,
     std::{
         collections::{hash_map::Entry, HashMap},
-        iter,
+        convert, iter,
     },
     wasm_convert::{IntoConstExpr, IntoExportKind, IntoGlobalType, IntoMemoryType},
     wasm_encoder::{
         Alias, CanonicalFunctionSection, CanonicalOption, CodeSection, Component,
-        ComponentAliasSection, ComponentExportKind, ComponentExportSection, ComponentExternName,
-        ComponentTypeSection, ComponentValType, ConstExpr, DataSection, ExportKind, ExportSection,
-        Function, FunctionSection, GlobalSection, GlobalType, ImportSection, InstanceSection,
+        ComponentAliasSection, ComponentExportKind, ComponentExportSection, ComponentTypeSection,
+        ComponentValType, ConstExpr, DataSection, ExportKind, ExportSection, Function,
+        FunctionSection, GlobalSection, GlobalType, ImportSection, InstanceSection,
         Instruction as Ins, MemArg, MemorySection, MemoryType, Module, ModuleArg, ModuleSection,
         NestedComponentSection, PrimitiveValType, RawSection, TypeSection, ValType,
     },
@@ -51,9 +53,17 @@ pub fn mem_arg(offset: u64, align: u32) -> MemArg {
     }
 }
 
-#[allow(clippy::while_let_on_iterator)]
 pub async fn initialize(
     component: &[u8],
+    initialize: impl FnOnce(Vec<u8>) -> BoxFuture<'static, Result<Box<dyn Invoker>>>,
+) -> Result<Vec<u8>> {
+    initialize_staged(component, None, initialize).await
+}
+
+#[allow(clippy::while_let_on_iterator, clippy::type_complexity)]
+pub async fn initialize_staged(
+    component_stage1: &[u8],
+    component_stage2_and_map_module_index: Option<(&[u8], &dyn Fn(u32) -> u32)>,
     initialize: impl FnOnce(Vec<u8>) -> BoxFuture<'static, Result<Box<dyn Invoker>>>,
 ) -> Result<Vec<u8>> {
     // First, instrument the input component, validating that it conforms to certain rules and exposing the memory
@@ -101,7 +111,7 @@ pub async fn initialize(
     let mut instantiations = HashMap::new();
     let mut stack_pointer_exports = Vec::new();
     let mut instrumented_component = Component::new();
-    let mut parser = Parser::new(0).parse_all(component);
+    let mut parser = Parser::new(0).parse_all(component_stage1);
     while let Some(payload) = parser.next() {
         let payload = payload?;
         let section = payload.as_section();
@@ -112,7 +122,7 @@ pub async fn initialize(
                     let payload = payload?;
                     let section = payload.as_section();
                     let my_range = section.as_ref().map(|(_, range)| range.clone());
-                    copy_component_section(section, component, &mut subcomponent);
+                    copy_component_section(section, component_stage1, &mut subcomponent);
 
                     if let Some(my_range) = my_range {
                         if my_range.end >= range.end {
@@ -124,10 +134,10 @@ pub async fn initialize(
             }
 
             Payload::ModuleSection { range, .. } => {
+                let module_index = get_and_increment(&mut module_count);
                 let mut global_types = Vec::new();
                 let mut empty = HashMap::new();
                 let mut instrumented_module = Module::new();
-                let module_index = get_and_increment(&mut module_count);
                 let mut global_count = 0;
                 while let Some(payload) = parser.next() {
                     let payload = payload?;
@@ -140,7 +150,11 @@ pub async fn initialize(
                                     global_count += 1;
                                 }
                             }
-                            copy_module_section(section, component, &mut instrumented_module);
+                            copy_module_section(
+                                section,
+                                component_stage1,
+                                &mut instrumented_module,
+                            );
                         }
 
                         Payload::MemorySection(reader) => {
@@ -154,7 +168,11 @@ pub async fn initialize(
                                     MemoryType::from(IntoMemoryType(memory?)),
                                 ));
                             }
-                            copy_module_section(section, component, &mut instrumented_module);
+                            copy_module_section(
+                                section,
+                                component_stage1,
+                                &mut instrumented_module,
+                            );
                         }
 
                         Payload::GlobalSection(reader) => {
@@ -170,7 +188,11 @@ pub async fn initialize(
                                         .insert(global_index, (None, ty.val_type));
                                 }
                             }
-                            copy_module_section(section, component, &mut instrumented_module);
+                            copy_module_section(
+                                section,
+                                component_stage1,
+                                &mut instrumented_module,
+                            );
                         }
 
                         Payload::ExportSection(reader) => {
@@ -226,10 +248,16 @@ pub async fn initialize(
                                     _ => (),
                                 }
                             }
-                            copy_module_section(section, component, &mut instrumented_module);
+                            copy_module_section(
+                                section,
+                                component_stage1,
+                                &mut instrumented_module,
+                            );
                         }
 
-                        _ => copy_module_section(section, component, &mut instrumented_module),
+                        _ => {
+                            copy_module_section(section, component_stage1, &mut instrumented_module)
+                        }
                     }
 
                     if let Some(my_range) = my_range {
@@ -254,7 +282,7 @@ pub async fn initialize(
                         }
                     }
                 }
-                copy_component_section(section, component, &mut instrumented_component);
+                copy_component_section(section, component_stage1, &mut instrumented_component);
             }
 
             Payload::ComponentAliasSection(reader) => {
@@ -281,7 +309,7 @@ pub async fn initialize(
                         _ => (),
                     }
                 }
-                copy_component_section(section, component, &mut instrumented_component);
+                copy_component_section(section, component_stage1, &mut instrumented_component);
             }
 
             Payload::ComponentCanonicalSection(reader) => {
@@ -298,7 +326,7 @@ pub async fn initialize(
                         }
                     }
                 }
-                copy_component_section(section, component, &mut instrumented_component);
+                copy_component_section(section, component_stage1, &mut instrumented_component);
             }
 
             Payload::ComponentImportSection(reader) => {
@@ -313,7 +341,7 @@ pub async fn initialize(
                         _ => (),
                     }
                 }
-                copy_component_section(section, component, &mut instrumented_component);
+                copy_component_section(section, component_stage1, &mut instrumented_component);
             }
 
             Payload::ComponentExportSection(reader) => {
@@ -328,17 +356,17 @@ pub async fn initialize(
                         _ => (),
                     }
                 }
-                copy_component_section(section, component, &mut instrumented_component);
+                copy_component_section(section, component_stage1, &mut instrumented_component);
             }
 
             Payload::ComponentTypeSection(reader) => {
                 for _ in reader {
                     type_count += 1;
                 }
-                copy_component_section(section, component, &mut instrumented_component);
+                copy_component_section(section, component_stage1, &mut instrumented_component);
             }
 
-            _ => copy_component_section(section, component, &mut instrumented_component),
+            _ => copy_component_section(section, component_stage1, &mut instrumented_component),
         }
     }
 
@@ -398,7 +426,7 @@ pub async fn initialize(
                 [CanonicalOption::UTF8],
             );
             component_exports.export(
-                ComponentExternName::Kebab(&export_name),
+                &export_name,
                 ComponentExportKind::Func,
                 function_count + offset,
                 None,
@@ -456,7 +484,7 @@ pub async fn initialize(
             [CanonicalOption::UTF8, CanonicalOption::Memory(0)],
         );
         component_exports.export(
-            ComponentExternName::Kebab(&export_name),
+            &export_name,
             ComponentExportKind::Func,
             function_count + offset,
             None,
@@ -555,9 +583,11 @@ pub async fn initialize(
     // the snapshoted values, with all data sections and start functions removed, and with a single active data
     // section added containing the memory snapshot.
 
+    let (component_stage2, map_module_index) =
+        component_stage2_and_map_module_index.unwrap_or((component_stage1, &convert::identity));
     let mut initialized_component = Component::new();
+    let mut parser = Parser::new(0).parse_all(component_stage2);
     let mut module_count = 0;
-    let mut parser = Parser::new(0).parse_all(component);
     while let Some(payload) = parser.next() {
         let payload = payload?;
         let section = payload.as_section();
@@ -568,7 +598,7 @@ pub async fn initialize(
                     let payload = payload?;
                     let section = payload.as_section();
                     let my_range = section.as_ref().map(|(_, range)| range.clone());
-                    copy_component_section(section, component, &mut subcomponent);
+                    copy_component_section(section, component_stage2, &mut subcomponent);
 
                     if let Some(my_range) = my_range {
                         if my_range.end >= range.end {
@@ -580,9 +610,9 @@ pub async fn initialize(
             }
 
             Payload::ModuleSection { range, .. } => {
-                let mut initialized_module = Module::new();
-                let module_index = get_and_increment(&mut module_count);
+                let module_index = map_module_index(get_and_increment(&mut module_count));
                 let mut global_values = global_values.remove(&module_index);
+                let mut initialized_module = Module::new();
                 let mut global_count = 0;
                 while let Some(payload) = parser.next() {
                     let payload = payload?;
@@ -612,7 +642,7 @@ pub async fn initialize(
                                     global_count += 1;
                                 }
                             }
-                            copy_module_section(section, component, &mut initialized_module);
+                            copy_module_section(section, component_stage2, &mut initialized_module);
                         }
 
                         Payload::GlobalSection(reader) => {
@@ -638,7 +668,9 @@ pub async fn initialize(
 
                         Payload::DataSection(_) | Payload::StartSection { .. } => (),
 
-                        _ => copy_module_section(section, component, &mut initialized_module),
+                        _ => {
+                            copy_module_section(section, component_stage2, &mut initialized_module)
+                        }
                     }
 
                     if let Some(my_range) = my_range {
@@ -664,7 +696,7 @@ pub async fn initialize(
                 initialized_component.section(&ModuleSection(&initialized_module));
             }
 
-            _ => copy_component_section(section, component, &mut initialized_component),
+            _ => copy_component_section(section, component_stage2, &mut initialized_component),
         }
     }
 
