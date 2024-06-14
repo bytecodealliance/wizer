@@ -8,9 +8,6 @@ anyhow = "1.0.71"
 wasm-convert = { git = "https://github.com/dicej/wasm-convert" }
 async-trait = "0.1.68"
 futures = "0.3.28"
-# TODO: switch to upstream release versions of these deps once
-# https://github.com/bytecodealliance/wasm-tools/pull/1459 is merged and
-# released:
-wasm-encoder = { git = "https://github.com/dicej/wasm-tools", branch = "adapt-world-imports" }
-wasmparser = { git = "https://github.com/dicej/wasm-tools", branch = "adapt-world-imports" }
+wasm-encoder = "0.209.1"
+wasmparser = "0.209.1"
 

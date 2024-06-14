@@ -19,7 +19,7 @@ use {
     },
     wasmparser::{
         CanonicalFunction, ComponentAlias, ComponentExternalKind, ComponentTypeRef, ExternalKind,
-        Instance, Operator, Parser, Payload, TypeRef, Validator, WasmFeatures,
+        Instance, Operator, Parser, Payload, TypeRef, Validator,
     },
 };
 
@@ -116,7 +116,7 @@ pub async fn initialize_staged(
         let payload = payload?;
         let section = payload.as_section();
         match payload {
-            Payload::ComponentSection { range, .. } => {
+            Payload::ComponentSection { unchecked_range, .. } => {
                 let mut subcomponent = Component::new();
                 while let Some(payload) = parser.next() {
                     let payload = payload?;
@@ -125,7 +125,7 @@ pub async fn initialize_staged(
                     copy_component_section(section, component_stage1, &mut subcomponent);
 
                     if let Some(my_range) = my_range {
-                        if my_range.end >= range.end {
+                        if my_range.end >= unchecked_range.end {
                             break;
                         }
                     }
@@ -133,7 +133,7 @@ pub async fn initialize_staged(
                 instrumented_component.section(&NestedComponentSection(&subcomponent));
             }
 
-            Payload::ModuleSection { range, .. } => {
+            Payload::ModuleSection { unchecked_range, .. } => {
                 let module_index = get_and_increment(&mut module_count);
                 let mut global_types = Vec::new();
                 let mut empty = HashMap::new();
@@ -261,7 +261,7 @@ pub async fn initialize_staged(
                     }
 
                     if let Some(my_range) = my_range {
-                        if my_range.end >= range.end {
+                        if my_range.end >= unchecked_range.end {
                             break;
                         }
                     }
@@ -391,6 +391,7 @@ pub async fn initialize_staged(
                 GlobalType {
                     val_type: *ty,
                     mutable: true,
+		    shared: false,
                 },
             );
             if name == "__stack_pointer" {
@@ -415,8 +416,8 @@ pub async fn initialize_staged(
                 .result(match ty {
                     ValType::I32 => PrimitiveValType::S32,
                     ValType::I64 => PrimitiveValType::S64,
-                    ValType::F32 => PrimitiveValType::Float32,
-                    ValType::F64 => PrimitiveValType::Float64,
+                    ValType::F32 => PrimitiveValType::F32,
+                    ValType::F64 => PrimitiveValType::F64,
                     ValType::V128 => bail!("V128 not yet supported"),
                     ValType::Ref(_) => bail!("reference types not supported"),
                 });
@@ -523,11 +524,7 @@ pub async fn initialize_staged(
 
     let instrumented_component = instrumented_component.finish();
 
-    Validator::new_with_features(WasmFeatures {
-        component_model: true,
-        ..WasmFeatures::default()
-    })
-    .validate_all(&instrumented_component)?;
+    Validator::new().validate_all(&instrumented_component)?;
 
     let mut invoker = initialize(instrumented_component).await?;
 
@@ -592,7 +589,7 @@ pub async fn initialize_staged(
         let payload = payload?;
         let section = payload.as_section();
         match payload {
-            Payload::ComponentSection { range, .. } => {
+            Payload::ComponentSection { unchecked_range, .. } => {
                 let mut subcomponent = Component::new();
                 while let Some(payload) = parser.next() {
                     let payload = payload?;
@@ -601,7 +598,7 @@ pub async fn initialize_staged(
                     copy_component_section(section, component_stage2, &mut subcomponent);
 
                     if let Some(my_range) = my_range {
-                        if my_range.end >= range.end {
+                        if my_range.end >= unchecked_range.end {
                             break;
                         }
                     }
@@ -609,7 +606,7 @@ pub async fn initialize_staged(
                 initialized_component.section(&NestedComponentSection(&subcomponent));
             }
 
-            Payload::ModuleSection { range, .. } => {
+            Payload::ModuleSection { unchecked_range, .. } => {
                 let module_index = map_module_index(get_and_increment(&mut module_count));
                 let mut global_values = global_values.remove(&module_index);
                 let mut initialized_module = Module::new();
@@ -674,7 +671,7 @@ pub async fn initialize_staged(
                     }
 
                     if let Some(my_range) = my_range {
-                        if my_range.end >= range.end {
+                        if my_range.end >= unchecked_range.end {
                             break;
                         }
                     }
@@ -702,11 +699,7 @@ pub async fn initialize_staged(
 
     let initialized_component = initialized_component.finish();
 
-    Validator::new_with_features(WasmFeatures {
-        component_model: true,
-        ..WasmFeatures::default()
-    })
-    .validate_all(&initialized_component)?;
+    Validator::new().validate_all(&initialized_component)?;
 
     Ok(initialized_component)
 }
