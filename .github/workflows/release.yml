@@ -70,31 +70,31 @@ jobs:
       # Download all the artifacts that we'll be publishing. Should keep an eye on
       # the `download-artifact` repository to see if we can ever get something
       # like "download all artifacts" or "download this list of artifacts"
-      - uses: actions/download-artifact@v1
+      - uses: actions/download-artifact@v4
         with:
           name: bins-x86_64-macos
           path: dist
-      - uses: actions/download-artifact@v1
+      - uses: actions/download-artifact@v4
         with:
           name: bins-aarch64-macos
           path: dist
-      - uses: actions/download-artifact@v1
+      - uses: actions/download-artifact@v4
         with:
           name: bins-x86_64-windows
           path: dist
-      - uses: actions/download-artifact@v1
+      - uses: actions/download-artifact@v4
         with:
           name: bins-x86_64-mingw
           path: dist
-      - uses: actions/download-artifact@v1
+      - uses: actions/download-artifact@v4
         with:
           name: bins-x86_64-linux
           path: dist
-      - uses: actions/download-artifact@v1
+      - uses: actions/download-artifact@v4
         with:
           name: bins-aarch64-linux
           path: dist
-      - uses: actions/download-artifact@v1
+      - uses: actions/download-artifact@v4
         with:
           name: bins-s390x-linux
           path: dist
