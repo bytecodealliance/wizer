@@ -8,13 +8,15 @@ use {
         collections::{hash_map::Entry, HashMap},
         convert, iter,
     },
-    wasm_convert::{IntoConstExpr, IntoExportKind, IntoGlobalType, IntoMemoryType},
+    wasm_convert::{
+        IntoConstExpr, IntoEntityType, IntoExportKind, IntoGlobalType, IntoMemoryType, IntoValType,
+    },
     wasm_encoder::{
         Alias, CanonicalFunctionSection, CanonicalOption, CodeSection, Component,
         ComponentAliasSection, ComponentExportKind, ComponentExportSection, ComponentTypeSection,
         ComponentValType, ConstExpr, DataSection, ExportKind, ExportSection, Function,
         FunctionSection, GlobalSection, GlobalType, ImportSection, InstanceSection,
-        Instruction as Ins, MemArg, MemorySection, MemoryType, Module, ModuleArg, ModuleSection,
+        Instruction as Ins, MemArg, MemorySection, Module, ModuleArg, ModuleSection,
         NestedComponentSection, PrimitiveValType, RawSection, TypeSection, ValType,
     },
     wasmparser::{
@@ -116,7 +118,9 @@ pub async fn initialize_staged(
         let payload = payload?;
         let section = payload.as_section();
         match payload {
-            Payload::ComponentSection { unchecked_range, .. } => {
+            Payload::ComponentSection {
+                unchecked_range, ..
+            } => {
                 let mut subcomponent = Component::new();
                 while let Some(payload) = parser.next() {
                     let payload = payload?;
@@ -133,7 +137,9 @@ pub async fn initialize_staged(
                 instrumented_component.section(&NestedComponentSection(&subcomponent));
             }
 
-            Payload::ModuleSection { unchecked_range, .. } => {
+            Payload::ModuleSection {
+                unchecked_range, ..
+            } => {
                 let module_index = get_and_increment(&mut module_count);
                 let mut global_types = Vec::new();
                 let mut empty = HashMap::new();
@@ -162,11 +168,7 @@ pub async fn initialize_staged(
                                 if memory_info.is_some() {
                                     bail!("only one memory allowed per component");
                                 }
-                                memory_info = Some((
-                                    module_index,
-                                    "memory",
-                                    MemoryType::from(IntoMemoryType(memory?)),
-                                ));
+                                memory_info = Some((module_index, "memory", memory?));
                             }
                             copy_module_section(
                                 section,
@@ -178,14 +180,14 @@ pub async fn initialize_staged(
                         Payload::GlobalSection(reader) => {
                             for global in reader {
                                 let global = global?;
-                                let ty = GlobalType::from(IntoGlobalType(global.ty));
+                                let ty = global.ty;
                                 global_types.push(ty);
                                 let global_index = get_and_increment(&mut global_count);
                                 if global.ty.mutable {
                                     globals_to_export
                                         .entry(module_index)
                                         .or_default()
-                                        .insert(global_index, (None, ty.val_type));
+                                        .insert(global_index, (None, ty.content_type));
                                 }
                             }
                             copy_module_section(
@@ -382,20 +384,21 @@ pub async fn initialize_staged(
     let mut stack_pointers = Vec::new();
     for (module_index, globals_to_export) in &globals_to_export {
         for (global_index, (name, ty)) in globals_to_export {
+            let ty = IntoValType(*ty).into();
             let offset = types.len();
-            types.function([], [*ty]);
+            types.function([], [ty]);
             let name = name.as_deref().unwrap();
             imports.import(
                 &module_index.to_string(),
                 name,
                 GlobalType {
-                    val_type: *ty,
+                    val_type: ty,
                     mutable: true,
-		    shared: false,
+                    shared: false,
                 },
             );
             if name == "__stack_pointer" {
-                stack_pointers.push((offset, *ty));
+                stack_pointers.push((offset, ty));
             }
             functions.function(offset);
             let mut function = Function::new([]);
@@ -445,11 +448,15 @@ pub async fn initialize_staged(
             ),
         };
         let offset = types.len();
-        types.function([], [ValType::I32]);
-        imports.import(&module_index.to_string(), name, ty);
+        types.function([], [wasm_encoder::ValType::I32]);
+        imports.import(
+            &module_index.to_string(),
+            name,
+            IntoEntityType(TypeRef::Memory(ty)),
+        );
         functions.function(offset);
 
-        let mut function = Function::new([(1, ValType::I32)]);
+        let mut function = Function::new([(1, wasm_encoder::ValType::I32)]);
         function.instruction(&Ins::GlobalGet(stack_pointer));
         function.instruction(&Ins::I32Const(8));
         function.instruction(&Ins::I32Sub);
@@ -537,32 +544,32 @@ pub async fn initialize_staged(
             my_global_values.insert(
                 *global_index,
                 match ty {
-                    ValType::I32 => ConstExpr::i32_const(
+                    wasmparser::ValType::I32 => ConstExpr::i32_const(
                         invoker
                             .call_s32(name)
                             .await
                             .with_context(|| name.to_owned())?,
                     ),
-                    ValType::I64 => ConstExpr::i64_const(
+                    wasmparser::ValType::I64 => ConstExpr::i64_const(
                         invoker
                             .call_s64(name)
                             .await
                             .with_context(|| name.to_owned())?,
                     ),
-                    ValType::F32 => ConstExpr::f32_const(
+                    wasmparser::ValType::F32 => ConstExpr::f32_const(
                         invoker
                             .call_float32(name)
                             .await
                             .with_context(|| name.to_owned())?,
                     ),
-                    ValType::F64 => ConstExpr::f64_const(
+                    wasmparser::ValType::F64 => ConstExpr::f64_const(
                         invoker
                             .call_float64(name)
                             .await
                             .with_context(|| name.to_owned())?,
                     ),
-                    ValType::V128 => bail!("V128 not yet supported"),
-                    ValType::Ref(_) => bail!("reference types not supported"),
+                    wasmparser::ValType::V128 => bail!("V128 not yet supported"),
+                    wasmparser::ValType::Ref(_) => bail!("reference types not supported"),
                 },
             );
         }
@@ -589,7 +596,9 @@ pub async fn initialize_staged(
         let payload = payload?;
         let section = payload.as_section();
         match payload {
-            Payload::ComponentSection { unchecked_range, .. } => {
+            Payload::ComponentSection {
+                unchecked_range, ..
+            } => {
                 let mut subcomponent = Component::new();
                 while let Some(payload) = parser.next() {
                     let payload = payload?;
@@ -606,7 +615,9 @@ pub async fn initialize_staged(
                 initialized_component.section(&NestedComponentSection(&subcomponent));
             }
 
-            Payload::ModuleSection { unchecked_range, .. } => {
+            Payload::ModuleSection {
+                unchecked_range, ..
+            } => {
                 let module_index = map_module_index(get_and_increment(&mut module_count));
                 let mut global_values = global_values.remove(&module_index);
                 let mut initialized_module = Module::new();
