@@ -14,8 +14,8 @@ use {
     wasm_encoder::{
         Alias, CanonicalFunctionSection, CanonicalOption, CodeSection, Component,
         ComponentAliasSection, ComponentExportKind, ComponentExportSection, ComponentTypeSection,
-        ComponentValType, ConstExpr, DataSection, ExportKind, ExportSection, Function,
-        FunctionSection, GlobalSection, GlobalType, ImportSection, InstanceSection,
+        ComponentValType, ConstExpr, DataCountSection, DataSection, ExportKind, ExportSection,
+        Function, FunctionSection, GlobalSection, GlobalType, ImportSection, InstanceSection,
         Instruction as Ins, MemArg, MemorySection, Module, ModuleArg, ModuleSection,
         NestedComponentSection, PrimitiveValType, RawSection, TypeSection, ValType,
     },
@@ -622,6 +622,23 @@ pub async fn initialize_staged(
                 let mut global_values = global_values.remove(&module_index);
                 let mut initialized_module = Module::new();
                 let mut global_count = 0;
+                let (data_section, data_segment_count) = if matches!(memory_info, Some((index, ..)) if index == module_index)
+                {
+                    let value = memory_value.as_deref().unwrap();
+                    let mut data = DataSection::new();
+                    let mut data_segment_count = 0;
+                    for (start, len) in Segments::new(value) {
+                        data_segment_count += 1;
+                        data.active(
+                            0,
+                            &ConstExpr::i32_const(start.try_into().unwrap()),
+                            value[start..][..len].iter().copied(),
+                        );
+                    }
+                    (Some(data), data_segment_count)
+                } else {
+                    (None, 0)
+                };
                 while let Some(payload) = parser.next() {
                     let payload = payload?;
                     let section = payload.as_section();
@@ -676,6 +693,12 @@ pub async fn initialize_staged(
 
                         Payload::DataSection(_) | Payload::StartSection { .. } => (),
 
+                        Payload::DataCountSection { .. } => {
+                            initialized_module.section(&DataCountSection {
+                                count: data_segment_count,
+                            });
+                        }
+
                         _ => {
                             copy_module_section(section, component_stage2, &mut initialized_module)
                         }
@@ -687,18 +710,8 @@ pub async fn initialize_staged(
                         }
                     }
                 }
-
-                if matches!(memory_info, Some((index, ..)) if index == module_index) {
-                    let value = memory_value.as_deref().unwrap();
-                    let mut data = DataSection::new();
-                    for (start, len) in Segments::new(value) {
-                        data.active(
-                            0,
-                            &ConstExpr::i32_const(start.try_into().unwrap()),
-                            value[start..][..len].iter().copied(),
-                        );
-                    }
-                    initialized_module.section(&data);
+                if let Some(data_section) = data_section {
+                    initialized_module.section(&data_section);
                 }
 
                 initialized_component.section(&ModuleSection(&initialized_module));
