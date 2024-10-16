@@ -36,8 +36,8 @@ const MAX_CONSECUTIVE_ZEROS: usize = 64;
 pub trait Invoker {
     async fn call_s32(&mut self, function: &str) -> Result<i32>;
     async fn call_s64(&mut self, function: &str) -> Result<i64>;
-    async fn call_float32(&mut self, function: &str) -> Result<f32>;
-    async fn call_float64(&mut self, function: &str) -> Result<f64>;
+    async fn call_f32(&mut self, function: &str) -> Result<f32>;
+    async fn call_f64(&mut self, function: &str) -> Result<f64>;
     async fn call_list_u8(&mut self, function: &str) -> Result<Vec<u8>>;
 }
 
@@ -326,6 +326,9 @@ pub async fn initialize_staged(
                         CanonicalFunction::Lift { .. } => {
                             function_count += 1;
                         }
+                        // Unused for now
+                        CanonicalFunction::ThreadSpawn { .. }
+                        | CanonicalFunction::ThreadHwConcurrency => {}
                     }
                 }
                 copy_component_section(section, component_stage1, &mut instrumented_component);
@@ -386,7 +389,7 @@ pub async fn initialize_staged(
         for (global_index, (name, ty)) in globals_to_export {
             let ty = IntoValType(*ty).into();
             let offset = types.len();
-            types.function([], [ty]);
+            types.ty().function([], [ty]);
             let name = name.as_deref().unwrap();
             imports.import(
                 &module_index.to_string(),
@@ -448,7 +451,7 @@ pub async fn initialize_staged(
             ),
         };
         let offset = types.len();
-        types.function([], [wasm_encoder::ValType::I32]);
+        types.ty().function([], [wasm_encoder::ValType::I32]);
         imports.import(
             &module_index.to_string(),
             name,
@@ -558,13 +561,13 @@ pub async fn initialize_staged(
                     ),
                     wasmparser::ValType::F32 => ConstExpr::f32_const(
                         invoker
-                            .call_float32(name)
+                            .call_f32(name)
                             .await
                             .with_context(|| name.to_owned())?,
                     ),
                     wasmparser::ValType::F64 => ConstExpr::f64_const(
                         invoker
-                            .call_float64(name)
+                            .call_f64(name)
                             .await
                             .with_context(|| name.to_owned())?,
                     ),
