@@ -42,6 +42,7 @@ const DEFAULT_WASM_MULTI_VALUE: bool = true;
 const DEFAULT_WASM_MULTI_MEMORY: bool = true;
 const DEFAULT_WASM_BULK_MEMORY: bool = false;
 const DEFAULT_WASM_SIMD: bool = true;
+const DEFAULT_WASM_REFERENCE_TYPES: bool = false;
 
 /// The type of data that is stored in the `wasmtime::Store` during
 /// initialization.
@@ -249,6 +250,15 @@ pub struct Wizer {
     /// Enabled by default.
     #[cfg_attr(feature = "structopt", structopt(long, value_name = "true|false"))]
     wasm_simd: Option<bool>,
+
+    /// Enable or disable the Wasm reference-types proposal.
+    ///
+    /// Currently does not implement any reference-types specific code,
+    /// but enables initializing Modules that have reference-types enabled
+    ///
+    /// Disabled by default.
+    #[cfg_attr(feature = "structopt", structopt(long, value_name = "true|false"))]
+    wasm_reference_types: Option<bool>,
 }
 
 impl std::fmt::Debug for Wizer {
@@ -269,6 +279,7 @@ impl std::fmt::Debug for Wizer {
             wasm_multi_value,
             wasm_bulk_memory,
             wasm_simd,
+            wasm_reference_types,
         } = self;
         f.debug_struct("Wizer")
             .field("init_func", &init_func)
@@ -286,6 +297,7 @@ impl std::fmt::Debug for Wizer {
             .field("wasm_multi_value", &wasm_multi_value)
             .field("wasm_bulk_memory", &wasm_bulk_memory)
             .field("wasm_simd", &wasm_simd)
+            .field("wasm_reference_types", &wasm_reference_types)
             .finish()
     }
 }
@@ -350,6 +362,7 @@ impl Wizer {
             wasm_multi_value: None,
             wasm_bulk_memory: None,
             wasm_simd: None,
+            wasm_reference_types: None,
         }
     }
 
@@ -632,8 +645,14 @@ impl Wizer {
 
         config.wasm_simd(self.wasm_simd.unwrap_or(DEFAULT_WASM_SIMD));
 
+        // Note that reference_types are not actually supported,
+        // but many compilers now enable them by default
+        config.wasm_reference_types(
+            self.wasm_reference_types
+                .unwrap_or(DEFAULT_WASM_REFERENCE_TYPES),
+        );
+
         // Proposals that we should add support for.
-        config.wasm_reference_types(false);
         config.wasm_threads(false);
 
         Ok(config)
@@ -654,7 +673,9 @@ impl Wizer {
             multi_value: self.wasm_multi_value.unwrap_or(DEFAULT_WASM_MULTI_VALUE),
 
             // Proposals that we should add support for.
-            reference_types: false,
+            reference_types: self
+                .wasm_reference_types
+                .unwrap_or(DEFAULT_WASM_REFERENCE_TYPES),
             simd: self.wasm_simd.unwrap_or(DEFAULT_WASM_SIMD),
             threads: false,
             tail_call: false,
