@@ -253,8 +253,9 @@ pub struct Wizer {
 
     /// Enable or disable the Wasm reference-types proposal.
     ///
-    /// Currently does not implement any reference-types specific code,
-    /// but enables initializing Modules that have reference-types enabled
+    /// Currently does not implement snapshotting or the use of references,
+    /// but enables initializing Wasm modules that use encodings introduced
+    /// in the reference-types proposal.
     ///
     /// Disabled by default.
     #[cfg_attr(feature = "structopt", structopt(long, value_name = "true|false"))]
