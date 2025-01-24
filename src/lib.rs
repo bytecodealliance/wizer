@@ -754,6 +754,30 @@ impl Wizer {
                             wasmparser::Operator::TableSet { .. } => {
                                 unreachable!("part of reference types")
                             }
+                            wasmparser::Operator::RefNull { .. } => {
+                                unreachable!("part of reference types")
+                            }
+                            wasmparser::Operator::RefIsNull => {
+                                unreachable!("part of reference types")
+                            }
+                            wasmparser::Operator::TypedSelect { .. } => {
+                                unreachable!("part of reference types")
+                            }
+                            wasmparser::Operator::RefFunc { .. } => {
+                                unreachable!("part of reference types")
+                            }
+                            wasmparser::Operator::TableGet { .. } => {
+                                unreachable!("part of reference types")
+                            }
+                            wasmparser::Operator::TableSize { .. } => {
+                                unreachable!("part of reference types")
+                            }
+                            wasmparser::Operator::TableGrow { .. } => {
+                                unreachable!("part of reference types")
+                            }
+                            wasmparser::Operator::TableFill { .. } => {
+                                unreachable!("part of reference types")
+                            }
                             _ => continue,
                         }
                     }
