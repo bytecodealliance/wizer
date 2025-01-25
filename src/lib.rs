@@ -760,31 +760,31 @@ impl Wizer {
                                 anyhow::bail!("unsupported `data.drop` instruction")
                             }
                             wasmparser::Operator::TableSet { .. } => {
-                                anyhow::bail!("part of reference types")
-                            }
-                            wasmparser::Operator::RefNull { .. } => {
-                                anyhow::bail!("part of reference types")
-                            }
-                            wasmparser::Operator::RefIsNull => {
-                                anyhow::bail!("part of reference types")
-                            }
-                            wasmparser::Operator::TypedSelect { .. } => {
-                                anyhow::bail!("part of reference types")
-                            }
-                            wasmparser::Operator::RefFunc { .. } => {
-                                anyhow::bail!("part of reference types")
+                                anyhow::bail!("unsupported `table.set` instruction")
                             }
                             wasmparser::Operator::TableGet { .. } => {
-                                anyhow::bail!("part of reference types")
+                                anyhow::bail!("unsupported `table.get` instruction")
+                            }
+                            wasmparser::Operator::RefNull { .. } => {
+                                anyhow::bail!("unsupported `ref.null` instruction")
+                            }
+                            wasmparser::Operator::RefIsNull => {
+                                anyhow::bail!("unsupported `ref.is_null` instruction")
+                            }
+                            wasmparser::Operator::TypedSelect { .. } => {
+                                anyhow::bail!("unsupported typed `select` instruction")
+                            }
+                            wasmparser::Operator::RefFunc { .. } => {
+                                anyhow::bail!("unsupported `ref.func` instruction")
                             }
                             wasmparser::Operator::TableSize { .. } => {
-                                anyhow::bail!("part of reference types")
+                                anyhow::bail!("unsupported `table.size` instruction")
                             }
                             wasmparser::Operator::TableGrow { .. } => {
-                                anyhow::bail!("part of reference types")
+                                anyhow::bail!("unsupported `table.grow` instruction")
                             }
                             wasmparser::Operator::TableFill { .. } => {
-                                anyhow::bail!("part of reference types")
+                                anyhow::bail!("unsupported `table.fill` instruction")
                             }
                             _ => continue,
                         }

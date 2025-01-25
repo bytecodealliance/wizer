@@ -298,8 +298,9 @@ fn reject_table_get_set_with_reference_types_enabled() -> Result<()> {
     assert!(result.is_err());
 
     let err = result.unwrap_err();
-    dbg!(&err);
-    assert!(err.to_string().contains("part of reference types"),);
+    assert!(err
+        .to_string()
+        .contains("unsupported `table.get` instruction"),);
 
     Ok(())
 }
@@ -328,8 +329,9 @@ fn reject_table_grow_with_reference_types_enabled() -> anyhow::Result<()> {
     assert!(result.is_err());
 
     let err = result.unwrap_err();
-    dbg!(&err);
-    assert!(err.to_string().contains("part of reference types"));
+    assert!(err
+        .to_string()
+        .contains("unsupported `ref.func` instruction"));
 
     Ok(())
 }
