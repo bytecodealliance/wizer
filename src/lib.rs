@@ -570,6 +570,14 @@ impl Wizer {
         self
     }
 
+    /// Enable or disable the Wasm reference-types proposal.
+    ///
+    /// Defaults to `false`.
+    pub fn wasm_reference_types(&mut self, enable: bool) -> &mut Self {
+        self.wasm_reference_types = Some(enable);
+        self
+    }
+
     /// Initialize the given Wasm, snapshot it, and return the serialized
     /// snapshot as a new, pre-initialized Wasm module.
     pub fn run(&self, wasm: &[u8]) -> anyhow::Result<Vec<u8>> {
