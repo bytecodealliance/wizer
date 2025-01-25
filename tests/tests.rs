@@ -727,3 +727,33 @@ fn accept_simd128() -> Result<()> {
         "#,
     )
 }
+
+#[test]
+fn reject_table_grow_with_reference_types_enabled() -> anyhow::Result<()> {
+    let wat = r#"
+      (module
+        (elem declare func $f)
+        (func $f)
+        (table 0 funcref)
+        (func (export "_initialize") (result i32)
+            ref.func $f
+            i32.const 1
+            table.grow
+        )
+      )"#;
+
+    let _ = env_logger::try_init();
+    let mut wizer = Wizer::new();
+    wizer.wasm_reference_types(true);
+    let result = run_wat(&[], 42, wat);
+
+    assert!(result.is_err());
+
+    let err = result.unwrap_err();
+    dbg!(&err);
+    assert!(err
+        .to_string()
+        .contains("reference types support is not enabled"));
+
+    Ok(())
+}
