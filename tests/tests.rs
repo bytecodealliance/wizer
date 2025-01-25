@@ -337,6 +337,32 @@ fn reject_table_grow_with_reference_types_enabled() -> anyhow::Result<()> {
 }
 
 #[test]
+fn indirect_call_with_reference_types() -> anyhow::Result<()> {
+    let wat = r#"
+      (module
+        (type $sig (func (result i32)))
+        (table 1 funcref)
+        (elem (i32.const 0) $f)
+        (func $f (type $sig)
+          i32.const 42
+        )
+        (func (export "wizer.initialize"))
+        (func (export "run") (result i32)
+          i32.const 0
+          call_indirect (type $sig)
+        )
+      )"#;
+
+    let _ = env_logger::try_init();
+    let mut wizer = Wizer::new();
+    wizer.wasm_reference_types(true);
+    wizer.wasm_bulk_memory(true);
+
+    let wasm = wat_to_wasm(wat)?;
+    wizen_and_run_wasm(&[], 42, &wasm, wizer)
+}
+
+#[test]
 fn reject_table_init() -> Result<()> {
     let result = run_wat(
         &[],
