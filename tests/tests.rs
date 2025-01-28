@@ -341,15 +341,16 @@ fn indirect_call_with_reference_types() -> anyhow::Result<()> {
     let wat = r#"
       (module
         (type $sig (func (result i32)))
-        (table 1 funcref)
-        (elem (i32.const 0) $f)
+        (table 0 funcref)
+        (table $table1 1 funcref)
+        (elem (table $table1) (i32.const 0) func $f)
         (func $f (type $sig)
           i32.const 42
         )
         (func (export "wizer.initialize"))
         (func (export "run") (result i32)
           i32.const 0
-          call_indirect (type $sig)
+          call_indirect $table1 (type $sig)
         )
       )"#;
 
