@@ -572,6 +572,10 @@ impl Wizer {
 
     /// Enable or disable the Wasm reference-types proposal.
     ///
+    /// Currently does not implement snapshotting or the use of references,
+    /// but enables initializing Wasm modules that use encodings introduced
+    /// in the reference-types proposal.
+    ///
     /// Defaults to `false`.
     pub fn wasm_reference_types(&mut self, enable: bool) -> &mut Self {
         self.wasm_reference_types = Some(enable);
