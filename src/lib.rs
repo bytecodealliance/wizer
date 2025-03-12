@@ -327,8 +327,7 @@ pub async fn initialize_staged(
                             function_count += 1;
                         }
                         // Unused for now
-                        CanonicalFunction::ThreadSpawn { .. }
-                        | CanonicalFunction::ThreadHwConcurrency => {}
+                        _ => {}
                     }
                 }
                 copy_component_section(section, component_stage1, &mut instrumented_component);
@@ -419,14 +418,14 @@ pub async fn initialize_staged(
             component_types
                 .function()
                 .params(iter::empty::<(_, ComponentValType)>())
-                .result(match ty {
+                .result(Some(ComponentValType::Primitive(match ty {
                     ValType::I32 => PrimitiveValType::S32,
                     ValType::I64 => PrimitiveValType::S64,
                     ValType::F32 => PrimitiveValType::F32,
                     ValType::F64 => PrimitiveValType::F64,
                     ValType::V128 => bail!("V128 not yet supported"),
                     ValType::Ref(_) => bail!("reference types not supported"),
-                });
+                })));
             lifts.lift(
                 core_function_count + offset,
                 type_count + component_types.len() - 1,
@@ -488,7 +487,7 @@ pub async fn initialize_staged(
         component_types
             .function()
             .params(iter::empty::<(_, ComponentValType)>())
-            .result(ComponentValType::Type(list_type));
+            .result(Some(ComponentValType::Type(list_type)));
         lifts.lift(
             core_function_count + offset,
             type_count + component_types.len() - 1,
