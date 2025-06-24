@@ -38,7 +38,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "futures",
- "wasm-convert",
  "wasm-encoder",
  "wasmparser",
 ]
@@ -258,15 +257,6 @@ name = "unicode-ident"
 version = "1.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e91b56cd4cadaeb79bbf1a5645f6b4f8dc5bde8834ad5894a8db35fda9efa1fe"
-
-[[package]]
-name = "wasm-convert"
-version = "0.1.0"
-source = "git+https://github.com/dicej/wasm-convert?rev=713e2d6a#713e2d6a724f33d94c2f3b88b759ad993608f12e"
-dependencies = [
- "wasm-encoder",
- "wasmparser",
-]
 
 [[package]]
 name = "wasm-encoder"

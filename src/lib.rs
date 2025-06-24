@@ -8,10 +8,8 @@ use {
         collections::{hash_map::Entry, HashMap},
         convert, iter,
     },
-    wasm_convert::{
-        IntoConstExpr, IntoEntityType, IntoExportKind, IntoGlobalType, IntoMemoryType, IntoValType,
-    },
     wasm_encoder::{
+        reencode::{Reencode, RoundtripReencoder as Encode},
         Alias, CanonicalFunctionSection, CanonicalOption, CodeSection, Component,
         ComponentAliasSection, ComponentExportKind, ComponentExportSection, ComponentTypeSection,
         ComponentValType, ConstExpr, DataCountSection, DataSection, ExportKind, ExportSection,
@@ -217,7 +215,7 @@ pub async fn initialize_staged(
                                 }
                                 exports.export(
                                     export.name,
-                                    IntoExportKind(export.kind).into(),
+                                    Encode.export_kind(export.kind),
                                     export.index,
                                 );
                             }
@@ -386,7 +384,7 @@ pub async fn initialize_staged(
     let mut stack_pointers = Vec::new();
     for (module_index, globals_to_export) in &globals_to_export {
         for (global_index, (name, ty)) in globals_to_export {
-            let ty = IntoValType(*ty).into();
+            let ty = Encode.val_type(*ty)?;
             let offset = types.len();
             types.ty().function([], [ty]);
             let name = name.as_deref().unwrap();
@@ -454,7 +452,7 @@ pub async fn initialize_staged(
         imports.import(
             &module_index.to_string(),
             name,
-            IntoEntityType(TypeRef::Memory(ty)),
+            Encode.entity_type(TypeRef::Memory(ty))?,
         );
         functions.function(offset);
 
@@ -658,7 +656,7 @@ pub async fn initialize_staged(
                                 )
                                 .unwrap();
 
-                                memories.memory(IntoMemoryType(memory).into());
+                                memories.memory(Encode.memory_type(memory));
                             }
                             initialized_module.section(&memories);
                         }
@@ -678,7 +676,7 @@ pub async fn initialize_staged(
                                 let global = global?;
                                 let global_index = get_and_increment(&mut global_count);
                                 globals.global(
-                                    IntoGlobalType(global.ty).into(),
+                                    Encode.global_type(global.ty)?,
                                     &if global.ty.mutable {
                                         global_values
                                             .as_mut()
@@ -686,7 +684,7 @@ pub async fn initialize_staged(
                                             .remove(&global_index)
                                             .unwrap()
                                     } else {
-                                        IntoConstExpr(global.init_expr).into()
+                                        Encode.const_expr(global.init_expr)?
                                     },
                                 );
                             }
