@@ -215,7 +215,7 @@ pub async fn initialize_staged(
                                 }
                                 exports.export(
                                     export.name,
-                                    Encode.export_kind(export.kind),
+                                    Encode.export_kind(export.kind)?,
                                     export.index,
                                 );
                             }
@@ -560,13 +560,15 @@ pub async fn initialize_staged(
                         invoker
                             .call_f32(name)
                             .await
-                            .with_context(|| name.to_owned())?,
+                            .with_context(|| name.to_owned())?
+                            .into(),
                     ),
                     wasmparser::ValType::F64 => ConstExpr::f64_const(
                         invoker
                             .call_f64(name)
                             .await
-                            .with_context(|| name.to_owned())?,
+                            .with_context(|| name.to_owned())?
+                            .into(),
                     ),
                     wasmparser::ValType::V128 => bail!("V128 not yet supported"),
                     wasmparser::ValType::Ref(_) => bail!("reference types not supported"),
@@ -656,7 +658,7 @@ pub async fn initialize_staged(
                                 )
                                 .unwrap();
 
-                                memories.memory(Encode.memory_type(memory));
+                                memories.memory(Encode.memory_type(memory)?);
                             }
                             initialized_module.section(&memories);
                         }
