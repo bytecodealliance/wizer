@@ -109,7 +109,6 @@ pub async fn initialize_staged(
     let mut memory_info = None;
     let mut globals_to_export = HashMap::<_, HashMap<_, _>>::new();
     let mut instantiations = HashMap::new();
-    let mut stack_pointer_exports = Vec::new();
     let mut instrumented_component = Component::new();
     let mut parser = Parser::new(0).parse_all(component_stage1);
     while let Some(payload) = parser.next() {
@@ -205,12 +204,6 @@ pub async fn initialize_staged(
                                         .and_then(|map| map.get_mut(&export.index))
                                     {
                                         *name = Some(export.name.to_owned());
-                                    }
-                                    if export.name == "__stack_pointer" {
-                                        stack_pointer_exports.push((
-                                            module_index,
-                                            global_types[usize::try_from(export.index).unwrap()],
-                                        ));
                                     }
                                 }
                                 exports.export(
