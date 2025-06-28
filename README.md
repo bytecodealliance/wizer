@@ -173,5 +173,5 @@ with data segments for each of the non-zero regions of memory we recorded.
 
 Want some more details? Check out the talk ["Hit the Ground Running: Wasm
 Snapshots for Fast Start
-Up"](https://fitzgeraldnick.com/2021/05/10/wasm-summit-2021.html) from the 2021
+Up"](https://github.com/fitzgen/wasm-summit-2021) from the 2021
 WebAssembly Summit.
