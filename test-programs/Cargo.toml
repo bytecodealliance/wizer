@@ -1,0 +1,8 @@
+[package]
+name = "test-programs"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+wit-bindgen.workspace = true

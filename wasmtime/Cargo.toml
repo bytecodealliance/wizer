@@ -1,0 +1,16 @@
+[package]
+name = "component-init-wasmtime"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+component-init.workspace = true
+wasmtime.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+test-programs-artifacts.workspace = true
+wat.workspace = true
+wasmtime-wasi.workspace = true

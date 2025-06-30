@@ -1,21 +1,21 @@
 #![deny(warnings)]
 
 use {
-    anyhow::{bail, Context, Result},
+    anyhow::{Context, Result, bail},
     async_trait::async_trait,
     futures::future::BoxFuture,
     std::{
-        collections::{hash_map::Entry, HashMap},
+        collections::{HashMap, hash_map::Entry},
         convert, iter,
     },
     wasm_encoder::{
-        reencode::{Reencode, RoundtripReencoder as Encode},
         Alias, CanonicalFunctionSection, CanonicalOption, CodeSection, Component,
         ComponentAliasSection, ComponentExportKind, ComponentExportSection, ComponentTypeSection,
         ComponentValType, ConstExpr, DataCountSection, DataSection, ExportKind, ExportSection,
         Function, FunctionSection, GlobalSection, GlobalType, ImportSection, InstanceSection,
         Instruction as Ins, MemArg, MemorySection, Module, ModuleArg, ModuleSection,
         NestedComponentSection, PrimitiveValType, RawSection, TypeSection, ValType,
+        reencode::{Reencode, RoundtripReencoder as Encode},
     },
     wasmparser::{
         CanonicalFunction, ComponentAlias, ComponentExternalKind, ComponentTypeRef, ExternalKind,
@@ -78,10 +78,6 @@ pub async fn initialize_staged(
     // - No runtime table operations
     // - No reference type globals
     // - Each module instantiated at most once
-    // - If a module exports a memory, a single module must export a mutable `__stack_pointer` global of type I32
-    //
-    // Note that we use `__stack_pointer` to allocate 8 bytes to store the canonical `list<u8>` representation of
-    // memory.
 
     let copy_component_section = |section, component: &[u8], result: &mut Component| {
         if let Some((id, range)) = section {
@@ -374,7 +370,6 @@ pub async fn initialize_staged(
     let mut lifts = CanonicalFunctionSection::new();
     let mut component_types = ComponentTypeSection::new();
     let mut component_exports = ComponentExportSection::new();
-    let mut stack_pointers = Vec::new();
     for (module_index, globals_to_export) in &globals_to_export {
         for (global_index, (name, ty)) in globals_to_export {
             let ty = Encode.val_type(*ty)?;
@@ -390,9 +385,6 @@ pub async fn initialize_staged(
                     shared: false,
                 },
             );
-            if name == "__stack_pointer" {
-                stack_pointers.push((offset, ty));
-            }
             functions.function(offset);
             let mut function = Function::new([]);
             function.instruction(&Ins::GlobalGet(offset));
@@ -432,14 +424,6 @@ pub async fn initialize_staged(
     }
 
     if let Some((module_index, name, ty)) = memory_info {
-        let stack_pointer = match stack_pointers.as_slice() {
-            [(offset, ValType::I32)] => *offset,
-
-            _ => bail!(
-                "component with memory must contain exactly one module which \
-                 exports a mutable `__stack_pointer` global of type I32"
-            ),
-        };
         let offset = types.len();
         types.ty().function([], [wasm_encoder::ValType::I32]);
         imports.import(
@@ -450,19 +434,41 @@ pub async fn initialize_staged(
         functions.function(offset);
 
         let mut function = Function::new([(1, wasm_encoder::ValType::I32)]);
-        function.instruction(&Ins::GlobalGet(stack_pointer));
-        function.instruction(&Ins::I32Const(8));
-        function.instruction(&Ins::I32Sub);
-        function.instruction(&Ins::LocalTee(0));
-        function.instruction(&Ins::I32Const(0));
-        function.instruction(&Ins::I32Store(mem_arg(0, 2)));
-        function.instruction(&Ins::LocalGet(0));
-        function.instruction(&Ins::I32Const(0));
-        function.instruction(&Ins::MemoryGrow(0));
+        function.instruction(&Ins::MemorySize(0));
+        // stack[0] = current memory, in pages
+
         function.instruction(&Ins::I32Const(PAGE_SIZE_BYTES));
         function.instruction(&Ins::I32Mul);
-        function.instruction(&Ins::I32Store(mem_arg(4, 2)));
+        function.instruction(&Ins::LocalTee(0));
+        // stack[0] = local[0] = current memory, in bytes
+
+        function.instruction(&Ins::I32Const(1));
+        function.instruction(&Ins::MemoryGrow(0));
+        // stack[1] = old memory, in bytes
+        // stack[0] = grown memory, in pages, or -1 if failed
+        function.instruction(&Ins::I32Const(0));
+        function.instruction(&Ins::I32LtS);
+        function.instruction(&Ins::If(wasm_encoder::BlockType::Empty));
+        // Trap if memory grow failed
+        function.instruction(&Ins::Unreachable);
+        function.instruction(&Ins::Else);
+        function.instruction(&Ins::End);
+
+        // stack[0] = old memory, in bytes
+        function.instruction(&Ins::I32Const(0));
+        // stack[1] = old memory in bytes
+        // stack[0] = 0 (start of memory)
+        function.instruction(&Ins::I32Store(mem_arg(0, 1)));
+        // 0 stored at end of old memory
         function.instruction(&Ins::LocalGet(0));
+        function.instruction(&Ins::LocalGet(0));
+        // stack[1] = old memory in bytes
+        // stack[0] = old memory in bytes
+        function.instruction(&Ins::I32Store(mem_arg(4, 1)));
+        // old memory size, stored at old memory + 4
+
+        function.instruction(&Ins::LocalGet(0));
+        // stack[0] = old memory in bytes
         function.instruction(&Ins::End);
         code.function(&function);
 
@@ -541,26 +547,26 @@ pub async fn initialize_staged(
                         invoker
                             .call_s32(name)
                             .await
-                            .with_context(|| name.to_owned())?,
+                            .with_context(|| format!("retrieving global value {name}"))?,
                     ),
                     wasmparser::ValType::I64 => ConstExpr::i64_const(
                         invoker
                             .call_s64(name)
                             .await
-                            .with_context(|| name.to_owned())?,
+                            .with_context(|| format!("retrieving global value {name}"))?,
                     ),
                     wasmparser::ValType::F32 => ConstExpr::f32_const(
                         invoker
                             .call_f32(name)
                             .await
-                            .with_context(|| name.to_owned())?
+                            .with_context(|| format!("retrieving global value {name}"))?
                             .into(),
                     ),
                     wasmparser::ValType::F64 => ConstExpr::f64_const(
                         invoker
                             .call_f64(name)
                             .await
-                            .with_context(|| name.to_owned())?
+                            .with_context(|| format!("retrieving global value {name}"))?
                             .into(),
                     ),
                     wasmparser::ValType::V128 => bail!("V128 not yet supported"),
@@ -573,7 +579,12 @@ pub async fn initialize_staged(
 
     let memory_value = if memory_info.is_some() {
         let name = "component-init-get-memory";
-        Some(invoker.call_list_u8(name).await.context(name)?)
+        Some(
+            invoker
+                .call_list_u8(name)
+                .await
+                .with_context(|| format!("retrieving memory with {name}"))?,
+        )
     } else {
         None
     };
