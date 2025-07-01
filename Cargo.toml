@@ -12,8 +12,8 @@ repository = "https://github.com/dicej/component-init"
 anyhow = "1.0.89"
 async-trait = "0.1.83"
 clap = { version = "4", features = ["derive"] }
-component-init-transform = { path = "./transform" }
-component-init-wasmtime = { path = "./wasmtime" }
+component-init-transform = { version = "0.1.0", path = "./transform" }
+component-init-wasmtime = { version = "0.1.0", path = "./wasmtime" }
 futures = "0.3.31"
 test-programs = { path = "./test-programs" }
 test-programs-artifacts = { path = "./test-programs/artifacts" }
