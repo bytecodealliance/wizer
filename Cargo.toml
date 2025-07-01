@@ -1,5 +1,6 @@
 [workspace]
-members = ["cli", "wasmtime", "test-programs", "test-programs/artifacts"]
+members = ["cli", "transform", "wasmtime", "test-programs", "test-programs/artifacts"]
+resolver = "3"
 
 [workspace.package]
 version = "0.1.0"
@@ -9,7 +10,7 @@ edition = "2024"
 anyhow = "1.0.89"
 async-trait = "0.1.83"
 clap = { version = "4", features = ["derive"] }
-component-init = { path = "." }
+component-init-transform = { path = "./transform" }
 component-init-wasmtime = { path = "./wasmtime" }
 futures = "0.3.31"
 test-programs = { path = "./test-programs" }
@@ -22,15 +23,3 @@ wasmtime-wasi = "34.0.1"
 wasmtime-wasi-http = "34.0.1"
 wat = "1.235.0"
 wit-bindgen = "0.43.0"
-
-[package]
-name = "component-init"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-anyhow.workspace = true
-async-trait.workspace = true
-futures.workspace = true
-wasm-encoder.workspace = true
-wasmparser.workspace = true

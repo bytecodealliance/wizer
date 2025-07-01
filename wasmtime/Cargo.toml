@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-component-init.workspace = true
+component-init-transform.workspace = true
 wasmtime.workspace = true
 
 [dev-dependencies]

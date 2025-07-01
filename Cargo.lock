@@ -354,17 +354,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
-name = "component-init"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "futures",
- "wasm-encoder 0.235.0",
- "wasmparser 0.235.0",
-]
-
-[[package]]
 name = "component-init-cli"
 version = "0.1.0"
 dependencies = [
@@ -375,12 +364,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "component-init-transform"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures",
+ "wasm-encoder 0.235.0",
+ "wasmparser 0.235.0",
+]
+
+[[package]]
 name = "component-init-wasmtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "component-init",
+ "component-init-transform",
  "test-programs-artifacts",
  "tokio",
  "wasmtime",

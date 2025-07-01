@@ -1,12 +1,12 @@
 use anyhow::{Context, Result, anyhow};
-use component_init::Invoker;
+use component_init_transform::Invoker;
 use wasmtime::{
     Config, Engine, Store,
     component::{Component, ComponentNamedList, Instance, Lift, Linker},
 };
 
 pub async fn initialize(component: &[u8]) -> Result<Vec<u8>> {
-    component_init::initialize(component, |instrumented| {
+    component_init_transform::initialize(component, |instrumented| {
         Box::pin(async move {
             let i = invoker(instrumented)
                 .await

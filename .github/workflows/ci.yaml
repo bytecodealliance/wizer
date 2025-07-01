@@ -38,6 +38,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: wasm32-wasip2
       - name: Format
         run: cargo fmt --all -- --check
       - name: Docs
