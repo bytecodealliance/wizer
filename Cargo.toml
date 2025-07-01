@@ -5,6 +5,8 @@ resolver = "3"
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/dicej/component-init"
 
 [workspace.dependencies]
 anyhow = "1.0.89"

@@ -1,5 +1,7 @@
 [package]
 name = "component-init-transform"
+description = "Tool for pre-initializing WebAssembly components"
+license.workspace = true
 version.workspace = true
 edition.workspace = true
 
