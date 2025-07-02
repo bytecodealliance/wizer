@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use test_programs_artifacts::TEST;
+use test_programs_artifacts::{RAW, USING_MACRO};
 
 async fn execute(component: &[u8]) -> Result<()> {
     use wasmtime::{
@@ -66,14 +66,9 @@ async fn execute(component: &[u8]) -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn init_rust() -> Result<()> {
-    println!("test component: {TEST:?}");
-
-    let component = std::fs::read(TEST)?;
-
+async fn inits_properly(component: &[u8]) -> Result<()> {
     // Without initialization, run will trap.
-    let err = execute(&component)
+    let err = execute(component)
         .await
         .err()
         .context("uninitialized run should trap")?;
@@ -82,11 +77,26 @@ async fn init_rust() -> Result<()> {
         "should die with an unreachable trap, got: {err:?}"
     );
 
-    let initialized_component = component_init_wasmtime::initialize(&component).await?;
+    let initialized_component = component_init_wasmtime::initialize(component).await?;
 
+    // After initialization, will not trap.
     execute(&initialized_component)
         .await
         .context("execute initialized component")?;
 
     Ok(())
+}
+
+#[tokio::test]
+async fn raw() -> Result<()> {
+    println!("test component: {RAW:?}");
+    let component = std::fs::read(RAW)?;
+    inits_properly(&component).await
+}
+
+#[tokio::test]
+async fn using_macro() -> Result<()> {
+    println!("test component: {USING_MACRO:?}");
+    let component = std::fs::read(USING_MACRO)?;
+    inits_properly(&component).await
 }

@@ -1,9 +1,8 @@
 [package]
-name = "test-programs"
+name = "component-init"
 version.workspace = true
 edition.workspace = true
-publish = false
 
 [dependencies]
-component-init.workspace = true
+component-init-macro.workspace = true
 wit-bindgen.workspace = true
