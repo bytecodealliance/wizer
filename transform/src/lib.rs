@@ -7,6 +7,7 @@ use {
     std::{
         collections::{HashMap, hash_map::Entry},
         convert, iter,
+        ops::Range,
     },
     wasm_encoder::{
         Alias, CanonicalFunctionSection, CanonicalOption, CodeSection, Component,
@@ -39,20 +40,6 @@ pub trait Invoker {
     async fn call_list_u8(&mut self, function: &str) -> Result<Vec<u8>>;
 }
 
-fn get_and_increment(n: &mut u32) -> u32 {
-    let v = *n;
-    *n += 1;
-    v
-}
-
-pub fn mem_arg(offset: u64, align: u32) -> MemArg {
-    MemArg {
-        offset,
-        align,
-        memory_index: 0,
-    }
-}
-
 pub async fn initialize(
     component: &[u8],
     initialize: impl FnOnce(Vec<u8>) -> BoxFuture<'static, Result<Box<dyn Invoker>>>,
@@ -60,10 +47,12 @@ pub async fn initialize(
     initialize_staged(component, None, initialize).await
 }
 
-#[allow(clippy::while_let_on_iterator, clippy::type_complexity)]
+pub type Stage2Map<'a> = Option<(&'a [u8], &'a dyn Fn(u32) -> u32)>;
+
+#[allow(clippy::type_complexity)]
 pub async fn initialize_staged(
     component_stage1: &[u8],
-    component_stage2_and_map_module_index: Option<(&[u8], &dyn Fn(u32) -> u32)>,
+    component_stage2_and_map_module_index: Stage2Map<'_>,
     initialize: impl FnOnce(Vec<u8>) -> BoxFuture<'static, Result<Box<dyn Invoker>>>,
 ) -> Result<Vec<u8>> {
     // First, instrument the input component, validating that it conforms to certain rules and exposing the memory
@@ -78,35 +67,254 @@ pub async fn initialize_staged(
     // - No runtime table operations
     // - No reference type globals
     // - Each module instantiated at most once
+    //
+    // `instrumentation` keeps track of all of the state which will be gathered from the instrumented
+    // component.
+    let (instrumented_component, instrumentation) = instrument(component_stage1)?;
 
-    let copy_component_section = |section, component: &[u8], result: &mut Component| {
-        if let Some((id, range)) = section {
-            result.section(&RawSection {
-                id,
-                data: &component[range],
-            });
+    Validator::new().validate_all(&instrumented_component)?;
+
+    // A component runtime will instantiate the component and run its component init function.
+    let mut invoker = initialize(instrumented_component).await?;
+
+    // The Invoker interface is used to extract the values instrumentation provided into a
+    // measurement.
+    let measurement = instrumentation.measure(&mut invoker).await?;
+
+    // Finally, create a new component by applying the measurement (contents of all globals and memory) to the component.
+    // The resulting component will identical to the original except with all mutable globals initialized to
+    // the snapshoted values, with all data sections and start functions removed, and with a single active data
+    // section added containing the memory snapshot.
+    apply(
+        measurement,
+        component_stage1,
+        component_stage2_and_map_module_index,
+    )
+}
+
+struct MemoryInfo {
+    module_index: u32,
+    export_name: String,
+    ty: wasmparser::MemoryType,
+}
+type GlobalMap<T> = HashMap<u32, HashMap<u32, T>>;
+#[derive(Debug)]
+enum GlobalExport {
+    Existing {
+        module_index: u32,
+        export_name: String,
+    },
+    Synthesized {
+        module_index: u32,
+        global_index: u32,
+    },
+}
+impl GlobalExport {
+    fn module_export(&self) -> String {
+        match self {
+            Self::Existing { export_name, .. } => export_name.clone(),
+            Self::Synthesized { global_index, .. } => format!("component-init:{global_index}"),
         }
-    };
-
-    let copy_module_section = |section, module: &[u8], result: &mut Module| {
-        if let Some((id, range)) = section {
-            result.section(&RawSection {
-                id,
-                data: &module[range],
-            });
+    }
+    fn component_export(&self) -> String {
+        match self {
+            Self::Existing {
+                module_index,
+                export_name,
+            } => format!("component-init-get-module{module_index}-global-{export_name}"),
+            Self::Synthesized {
+                module_index,
+                global_index,
+            } => format!("component-init-get-module{module_index}-global{global_index}"),
         }
-    };
+    }
+}
 
+#[derive(Default)]
+struct Instrumentation {
+    memory: Option<MemoryInfo>,
+    globals: GlobalMap<(GlobalExport, wasmparser::ValType)>,
+}
+impl Instrumentation {
+    fn register_memory(
+        &mut self,
+        module_index: u32,
+        name: impl AsRef<str>,
+        ty: wasmparser::MemoryType,
+    ) -> Result<()> {
+        if self.memory.is_some() {
+            bail!("only one memory allowed per component");
+        }
+        self.memory = Some(MemoryInfo {
+            module_index,
+            export_name: name.as_ref().to_string(),
+            ty,
+        });
+        Ok(())
+    }
+    fn register_global(&mut self, module_index: u32, global_index: u32, ty: wasmparser::ValType) {
+        self.globals.entry(module_index).or_default().insert(
+            global_index,
+            (
+                GlobalExport::Synthesized {
+                    module_index,
+                    global_index,
+                },
+                ty,
+            ),
+        );
+    }
+    fn register_global_export(
+        &mut self,
+        module_index: u32,
+        global_index: u32,
+        export_name: impl AsRef<str>,
+    ) {
+        if let Some((name, _)) = self
+            .globals
+            .get_mut(&module_index)
+            .and_then(|map| map.get_mut(&global_index))
+        {
+            let export_name = export_name.as_ref().to_string();
+            *name = GlobalExport::Existing {
+                module_index,
+                export_name,
+            };
+        }
+    }
+    fn amend_module_exports(&self, module_index: u32, exports: &mut ExportSection) {
+        if let Some(g_map) = self.globals.get(&module_index) {
+            for (export, _ty) in g_map.values() {
+                if let GlobalExport::Synthesized { global_index, .. } = export {
+                    exports.export(&export.module_export(), ExportKind::Global, *global_index);
+                }
+            }
+        }
+    }
+    async fn measure(&self, invoker: &mut Box<dyn Invoker>) -> Result<Measurement> {
+        let mut globals = HashMap::new();
+
+        for (module_index, globals_to_export) in &self.globals {
+            let mut my_global_values = HashMap::new();
+            for (global_index, (global_export, ty)) in globals_to_export {
+                my_global_values.insert(
+                    *global_index,
+                    match ty {
+                        wasmparser::ValType::I32 => ConstExpr::i32_const(
+                            invoker
+                                .call_s32(&global_export.component_export())
+                                .await
+                                .with_context(|| {
+                                    format!("retrieving global value {global_export:?}")
+                                })?,
+                        ),
+                        wasmparser::ValType::I64 => ConstExpr::i64_const(
+                            invoker
+                                .call_s64(&global_export.component_export())
+                                .await
+                                .with_context(|| {
+                                    format!("retrieving global value {global_export:?}")
+                                })?,
+                        ),
+                        wasmparser::ValType::F32 => ConstExpr::f32_const(
+                            invoker
+                                .call_f32(&global_export.component_export())
+                                .await
+                                .with_context(|| {
+                                    format!("retrieving global value {global_export:?}")
+                                })?
+                                .into(),
+                        ),
+                        wasmparser::ValType::F64 => ConstExpr::f64_const(
+                            invoker
+                                .call_f64(&global_export.component_export())
+                                .await
+                                .with_context(|| {
+                                    format!("retrieving global value {global_export:?}")
+                                })?
+                                .into(),
+                        ),
+                        wasmparser::ValType::V128 => bail!("V128 not yet supported"),
+                        wasmparser::ValType::Ref(_) => bail!("reference types not supported"),
+                    },
+                );
+            }
+            globals.insert(*module_index, my_global_values);
+        }
+
+        let memory = if let Some(info) = &self.memory {
+            let name = "component-init-get-memory";
+            Some((
+                info.module_index,
+                invoker
+                    .call_list_u8(name)
+                    .await
+                    .with_context(|| format!("retrieving memory with {name}"))?,
+            ))
+        } else {
+            None
+        };
+        Ok(Measurement { memory, globals })
+    }
+}
+
+struct Measurement {
+    memory: Option<(u32, Vec<u8>)>,
+    globals: GlobalMap<wasm_encoder::ConstExpr>,
+}
+
+impl Measurement {
+    fn data_section(&self, module_index: u32) -> (Option<DataSection>, u32) {
+        if let Some((m_ix, value)) = &self.memory
+            && *m_ix == module_index
+        {
+            let mut data = DataSection::new();
+            let mut data_segment_count = 0;
+            for (start, len) in Segments::new(value) {
+                data_segment_count += 1;
+                data.active(
+                    0,
+                    &ConstExpr::i32_const(start.try_into().unwrap()),
+                    value[start..][..len].iter().copied(),
+                );
+            }
+            (Some(data), data_segment_count)
+        } else {
+            (None, 0)
+        }
+    }
+
+    fn memory_initial(&self, module_index: u32) -> Option<u64> {
+        if let Some((m_ix, value)) = &self.memory
+            && *m_ix == module_index
+        {
+            Some(
+                u64::try_from((value.len() / usize::try_from(PAGE_SIZE_BYTES).unwrap()) + 1)
+                    .unwrap(),
+            )
+        } else {
+            None
+        }
+    }
+
+    fn global_init(&self, module_index: u32, global_index: u32) -> Option<wasm_encoder::ConstExpr> {
+        self.globals
+            .get(&module_index)
+            .and_then(|m| m.get(&global_index).cloned())
+    }
+}
+
+fn instrument(component_stage1: &[u8]) -> Result<(Vec<u8>, Instrumentation)> {
     let mut module_count = 0;
     let mut instance_count = 0;
     let mut core_function_count = 0;
     let mut function_count = 0;
     let mut type_count = 0;
-    let mut memory_info = None;
-    let mut globals_to_export = HashMap::<_, HashMap<_, _>>::new();
+    let mut instrumentation = Instrumentation::default();
     let mut instantiations = HashMap::new();
     let mut instrumented_component = Component::new();
     let mut parser = Parser::new(0).parse_all(component_stage1);
+    #[allow(clippy::while_let_on_iterator)]
     while let Some(payload) = parser.next() {
         let payload = payload?;
         let section = payload.as_section();
@@ -135,7 +343,6 @@ pub async fn initialize_staged(
             } => {
                 let module_index = get_and_increment(&mut module_count);
                 let mut global_types = Vec::new();
-                let mut empty = HashMap::new();
                 let mut instrumented_module = Module::new();
                 let mut global_count = 0;
                 while let Some(payload) = parser.next() {
@@ -158,10 +365,7 @@ pub async fn initialize_staged(
 
                         Payload::MemorySection(reader) => {
                             for memory in reader {
-                                if memory_info.is_some() {
-                                    bail!("only one memory allowed per component");
-                                }
-                                memory_info = Some((module_index, "memory", memory?));
+                                instrumentation.register_memory(module_index, "memory", memory?)?;
                             }
                             copy_module_section(
                                 section,
@@ -177,10 +381,11 @@ pub async fn initialize_staged(
                                 global_types.push(ty);
                                 let global_index = get_and_increment(&mut global_count);
                                 if global.ty.mutable {
-                                    globals_to_export
-                                        .entry(module_index)
-                                        .or_default()
-                                        .insert(global_index, (None, ty.content_type));
+                                    instrumentation.register_global(
+                                        module_index,
+                                        global_index,
+                                        ty.content_type,
+                                    )
                                 }
                             }
                             copy_module_section(
@@ -195,12 +400,11 @@ pub async fn initialize_staged(
                             for export in reader {
                                 let export = export?;
                                 if let ExternalKind::Global = export.kind {
-                                    if let Some((name, _)) = globals_to_export
-                                        .get_mut(&module_index)
-                                        .and_then(|map| map.get_mut(&export.index))
-                                    {
-                                        *name = Some(export.name.to_owned());
-                                    }
+                                    instrumentation.register_global_export(
+                                        module_index,
+                                        export.index,
+                                        export.name,
+                                    )
                                 }
                                 exports.export(
                                     export.name,
@@ -209,16 +413,7 @@ pub async fn initialize_staged(
                                 );
                             }
 
-                            for (index, (name, _)) in globals_to_export
-                                .get_mut(&module_index)
-                                .unwrap_or(&mut empty)
-                            {
-                                if name.is_none() {
-                                    let new_name = format!("component-init:{index}");
-                                    exports.export(&new_name, ExportKind::Global, *index);
-                                    *name = Some(new_name);
-                                }
-                            }
+                            instrumentation.amend_module_exports(module_index, &mut exports);
 
                             instrumented_module.section(&exports);
                         }
@@ -370,15 +565,15 @@ pub async fn initialize_staged(
     let mut lifts = CanonicalFunctionSection::new();
     let mut component_types = ComponentTypeSection::new();
     let mut component_exports = ComponentExportSection::new();
-    for (module_index, globals_to_export) in &globals_to_export {
-        for (global_index, (name, ty)) in globals_to_export {
+
+    for (module_index, module_globals) in &instrumentation.globals {
+        for (global_export, ty) in module_globals.values() {
             let ty = Encode.val_type(*ty)?;
             let offset = types.len();
             types.ty().function([], [ty]);
-            let name = name.as_deref().unwrap();
             imports.import(
                 &module_index.to_string(),
-                name,
+                &global_export.module_export(),
                 GlobalType {
                     val_type: ty,
                     mutable: true,
@@ -390,8 +585,7 @@ pub async fn initialize_staged(
             function.instruction(&Ins::GlobalGet(offset));
             function.instruction(&Ins::End);
             code.function(&function);
-            let export_name =
-                format!("component-init-get-module{module_index}-global{global_index}");
+            let export_name = global_export.component_export();
             exports.export(&export_name, ExportKind::Func, offset);
             aliases.alias(Alias::CoreInstanceExport {
                 instance: instance_count,
@@ -423,13 +617,13 @@ pub async fn initialize_staged(
         }
     }
 
-    if let Some((module_index, name, ty)) = memory_info {
+    if let Some(memory_info) = &instrumentation.memory {
         let offset = types.len();
         types.ty().function([], [wasm_encoder::ValType::I32]);
         imports.import(
-            &module_index.to_string(),
-            name,
-            Encode.entity_type(TypeRef::Memory(ty))?,
+            &memory_info.module_index.to_string(),
+            &memory_info.export_name,
+            Encode.entity_type(TypeRef::Memory(memory_info.ty))?,
         );
         functions.function(offset);
 
@@ -529,75 +723,20 @@ pub async fn initialize_staged(
     // invoke the functions we added above to capture the state of the initialized instance.
 
     let instrumented_component = instrumented_component.finish();
+    Ok((instrumented_component, instrumentation))
+}
 
-    Validator::new().validate_all(&instrumented_component)?;
-
-    let mut invoker = initialize(instrumented_component).await?;
-
-    let mut global_values = HashMap::new();
-
-    for (module_index, globals_to_export) in &globals_to_export {
-        let mut my_global_values = HashMap::new();
-        for (global_index, (_, ty)) in globals_to_export {
-            let name = &format!("component-init-get-module{module_index}-global{global_index}");
-            my_global_values.insert(
-                *global_index,
-                match ty {
-                    wasmparser::ValType::I32 => ConstExpr::i32_const(
-                        invoker
-                            .call_s32(name)
-                            .await
-                            .with_context(|| format!("retrieving global value {name}"))?,
-                    ),
-                    wasmparser::ValType::I64 => ConstExpr::i64_const(
-                        invoker
-                            .call_s64(name)
-                            .await
-                            .with_context(|| format!("retrieving global value {name}"))?,
-                    ),
-                    wasmparser::ValType::F32 => ConstExpr::f32_const(
-                        invoker
-                            .call_f32(name)
-                            .await
-                            .with_context(|| format!("retrieving global value {name}"))?
-                            .into(),
-                    ),
-                    wasmparser::ValType::F64 => ConstExpr::f64_const(
-                        invoker
-                            .call_f64(name)
-                            .await
-                            .with_context(|| format!("retrieving global value {name}"))?
-                            .into(),
-                    ),
-                    wasmparser::ValType::V128 => bail!("V128 not yet supported"),
-                    wasmparser::ValType::Ref(_) => bail!("reference types not supported"),
-                },
-            );
-        }
-        global_values.insert(*module_index, my_global_values);
-    }
-
-    let memory_value = if memory_info.is_some() {
-        let name = "component-init-get-memory";
-        Some(
-            invoker
-                .call_list_u8(name)
-                .await
-                .with_context(|| format!("retrieving memory with {name}"))?,
-        )
-    } else {
-        None
-    };
-
-    // Finally, create a new component, identical to the original except with all mutable globals initialized to
-    // the snapshoted values, with all data sections and start functions removed, and with a single active data
-    // section added containing the memory snapshot.
-
+fn apply(
+    measurement: Measurement,
+    component_stage1: &[u8],
+    component_stage2_and_map_module_index: Stage2Map<'_>,
+) -> Result<Vec<u8>> {
     let (component_stage2, map_module_index) =
         component_stage2_and_map_module_index.unwrap_or((component_stage1, &convert::identity));
     let mut initialized_component = Component::new();
     let mut parser = Parser::new(0).parse_all(component_stage2);
     let mut module_count = 0;
+    #[allow(clippy::while_let_on_iterator)]
     while let Some(payload) = parser.next() {
         let payload = payload?;
         let section = payload.as_section();
@@ -625,26 +764,9 @@ pub async fn initialize_staged(
                 unchecked_range, ..
             } => {
                 let module_index = map_module_index(get_and_increment(&mut module_count));
-                let mut global_values = global_values.remove(&module_index);
                 let mut initialized_module = Module::new();
                 let mut global_count = 0;
-                let (data_section, data_segment_count) = if matches!(memory_info, Some((index, ..)) if index == module_index)
-                {
-                    let value = memory_value.as_deref().unwrap();
-                    let mut data = DataSection::new();
-                    let mut data_segment_count = 0;
-                    for (start, len) in Segments::new(value) {
-                        data_segment_count += 1;
-                        data.active(
-                            0,
-                            &ConstExpr::i32_const(start.try_into().unwrap()),
-                            value[start..][..len].iter().copied(),
-                        );
-                    }
-                    (Some(data), data_segment_count)
-                } else {
-                    (None, 0)
-                };
+                let (data_section, data_segment_count) = measurement.data_section(module_index);
                 while let Some(payload) = parser.next() {
                     let payload = payload?;
                     let section = payload.as_section();
@@ -655,12 +777,9 @@ pub async fn initialize_staged(
                             for memory in reader {
                                 let mut memory = memory?;
 
-                                memory.initial = u64::try_from(
-                                    (memory_value.as_deref().unwrap().len()
-                                        / usize::try_from(PAGE_SIZE_BYTES).unwrap())
-                                        + 1,
-                                )
-                                .unwrap();
+                                memory.initial = measurement
+                                    .memory_initial(module_index)
+                                    .expect("measurement for module's memory");
 
                                 memories.memory(Encode.memory_type(memory)?);
                             }
@@ -684,11 +803,9 @@ pub async fn initialize_staged(
                                 globals.global(
                                     Encode.global_type(global.ty)?,
                                     &if global.ty.mutable {
-                                        global_values
-                                            .as_mut()
-                                            .unwrap()
-                                            .remove(&global_index)
-                                            .unwrap()
+                                        measurement
+                                            .global_init(module_index, global_index)
+                                            .expect("measurement for global")
                                     } else {
                                         Encode.const_expr(global.init_expr)?
                                     },
@@ -779,5 +896,41 @@ impl<'a> Iterator for Segments<'a> {
             self.offset = self.bytes.len();
             None
         }
+    }
+}
+
+fn get_and_increment(n: &mut u32) -> u32 {
+    let v = *n;
+    *n += 1;
+    v
+}
+
+fn mem_arg(offset: u64, align: u32) -> MemArg {
+    MemArg {
+        offset,
+        align,
+        memory_index: 0,
+    }
+}
+
+fn copy_component_section(
+    section: Option<(u8, Range<usize>)>,
+    component: &[u8],
+    result: &mut Component,
+) {
+    if let Some((id, range)) = section {
+        result.section(&RawSection {
+            id,
+            data: &component[range],
+        });
+    }
+}
+
+fn copy_module_section(section: Option<(u8, Range<usize>)>, module: &[u8], result: &mut Module) {
+    if let Some((id, range)) = section {
+        result.section(&RawSection {
+            id,
+            data: &module[range],
+        });
     }
 }
