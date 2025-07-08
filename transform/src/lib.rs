@@ -102,6 +102,7 @@ type GlobalMap<T> = HashMap<u32, HashMap<u32, T>>;
 enum GlobalExport {
     Existing {
         module_index: u32,
+        global_index: u32,
         export_name: String,
     },
     Synthesized {
@@ -120,8 +121,9 @@ impl GlobalExport {
         match self {
             Self::Existing {
                 module_index,
-                export_name,
-            } => format!("component-init-get-module{module_index}-global-{export_name}"),
+                global_index,
+                ..
+            } => format!("component-init-get-module{module_index}-global{global_index}"),
             Self::Synthesized {
                 module_index,
                 global_index,
@@ -178,6 +180,7 @@ impl Instrumentation {
             let export_name = export_name.as_ref().to_string();
             *name = GlobalExport::Existing {
                 module_index,
+                global_index,
                 export_name,
             };
         }
