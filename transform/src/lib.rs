@@ -849,6 +849,14 @@ fn apply(
 
     let initialized_component = initialized_component.finish();
 
+    let mut add = wasm_metadata::AddMetadata::default();
+    add.processed_by = vec![(
+        "component-init-transform".to_owned(),
+        env!("CARGO_PKG_VERSION").to_owned(),
+    )];
+
+    let initialized_component = add.to_wasm(&initialized_component)?;
+
     Validator::new().validate_all(&initialized_component)?;
 
     Ok(initialized_component)
