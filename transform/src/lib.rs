@@ -332,10 +332,10 @@ fn instrument(component_stage1: &[u8]) -> Result<(Vec<u8>, Instrumentation)> {
                     let my_range = section.as_ref().map(|(_, range)| range.clone());
                     copy_component_section(section, component_stage1, &mut subcomponent);
 
-                    if let Some(my_range) = my_range {
-                        if my_range.end >= unchecked_range.end {
-                            break;
-                        }
+                    if let Some(my_range) = my_range
+                        && my_range.end >= unchecked_range.end
+                    {
+                        break;
                     }
                 }
                 instrumented_component.section(&NestedComponentSection(&subcomponent));
@@ -447,10 +447,10 @@ fn instrument(component_stage1: &[u8]) -> Result<(Vec<u8>, Instrumentation)> {
                         }
                     }
 
-                    if let Some(my_range) = my_range {
-                        if my_range.end >= unchecked_range.end {
-                            break;
-                        }
+                    if let Some(my_range) = my_range
+                        && my_range.end >= unchecked_range.end
+                    {
+                        break;
                     }
                 }
                 instrumented_component.section(&ModuleSection(&instrumented_module));
@@ -754,10 +754,10 @@ fn apply(
                     let my_range = section.as_ref().map(|(_, range)| range.clone());
                     copy_component_section(section, component_stage2, &mut subcomponent);
 
-                    if let Some(my_range) = my_range {
-                        if my_range.end >= unchecked_range.end {
-                            break;
-                        }
+                    if let Some(my_range) = my_range
+                        && my_range.end >= unchecked_range.end
+                    {
+                        break;
                     }
                 }
                 initialized_component.section(&NestedComponentSection(&subcomponent));
@@ -830,10 +830,10 @@ fn apply(
                         }
                     }
 
-                    if let Some(my_range) = my_range {
-                        if my_range.end >= unchecked_range.end {
-                            break;
-                        }
+                    if let Some(my_range) = my_range
+                        && my_range.end >= unchecked_range.end
+                    {
+                        break;
                     }
                 }
                 if let Some(data_section) = data_section {
