@@ -6,7 +6,7 @@ async fn execute(component: &[u8]) -> Result<()> {
         Config, Engine, Store,
         component::{Component, Linker, ResourceTable},
     };
-    use wasmtime_wasi::p2::WasiCtx;
+    use wasmtime_wasi::{WasiCtx, WasiCtxView};
 
     let mut config = Config::new();
     config.async_support(true);
@@ -17,14 +17,12 @@ async fn execute(component: &[u8]) -> Result<()> {
         table: ResourceTable,
         wasi: WasiCtx,
     }
-    impl wasmtime_wasi::p2::IoView for Ctx {
-        fn table(&mut self) -> &mut ResourceTable {
-            &mut self.table
-        }
-    }
-    impl wasmtime_wasi::p2::WasiView for Ctx {
-        fn ctx(&mut self) -> &mut WasiCtx {
-            &mut self.wasi
+    impl wasmtime_wasi::WasiView for Ctx {
+        fn ctx(&mut self) -> WasiCtxView<'_> {
+            WasiCtxView {
+                ctx: &mut self.wasi,
+                table: &mut self.table,
+            }
         }
     }
 
@@ -54,15 +52,15 @@ async fn execute(component: &[u8]) -> Result<()> {
         .ok_or_else(|| anyhow!("`wasi:cli/run.run` export is not a func"))?;
     let func = func
         .typed::<(), (Result<(), ()>,)>(&mut store)
-        .with_context(|| format!("type of run func"))?;
+        .context("type of run func")?;
     func.call_async(&mut store, ())
         .await
-        .with_context(|| format!("executing run"))?
+        .context("executing run")?
         .0
         .map_err(|()| anyhow!("run returned error"))?;
     func.post_return_async(&mut store)
         .await
-        .with_context(|| format!("post-return run"))?;
+        .context("post-return run")?;
     Ok(())
 }
 

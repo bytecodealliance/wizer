@@ -28,7 +28,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --workspace
+          args: --workspace --all-targets
   check_fmt_and_docs:
     name: Checking Format and Docs
     runs-on: ubuntu-latest

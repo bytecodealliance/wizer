@@ -11,7 +11,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/dicej/component-init"
@@ -20,21 +20,21 @@ repository = "https://github.com/dicej/component-init"
 anyhow = "1.0.89"
 async-trait = "0.1.83"
 clap = { version = "4", features = ["derive"] }
-component-init = { version = "0.1.0", path = "./guest-rust" }
-component-init-macro = { version = "0.1.0", path = "./guest-rust/macro" }
-component-init-transform = { version = "0.1.0", path = "./transform" }
-component-init-wasmtime = { version = "0.1.0", path = "./wasmtime" }
+component-init = { version = "0.2.0", path = "./guest-rust" }
+component-init-macro = { version = "0.2.0", path = "./guest-rust/macro" }
+component-init-transform = { version = "0.2.0", path = "./transform" }
+component-init-wasmtime = { version = "0.2.0", path = "./wasmtime" }
 futures = "0.3.31"
 quote = "1.0"
 syn = "2.0"
 test-programs = { path = "./test-programs" }
 test-programs-artifacts = { path = "./test-programs/artifacts" }
 tokio = { version = "1", features = ["full"] }
-wasm-encoder = { version = "0.235.0", features = ["wasmparser"] }
-wasmparser = "0.235.0"
-wasmtime = "34.0.1"
-wasmtime-wasi = "34.0.1"
-wasmtime-wasi-http = "34.0.1"
-wat = "1.235.0"
-wit-bindgen = "0.43.0"
-wasm-metadata = "0.235.0"
+wasm-encoder = { version = "0.238.1", features = ["wasmparser"] }
+wasmparser = "0.238.1"
+wasmtime = "36.0.2"
+wasmtime-wasi = "36.0.2"
+wasmtime-wasi-http = "36.0.2"
+wat = "1.238.1"
+wit-bindgen = "0.45.0"
+wasm-metadata = "0.238.1"

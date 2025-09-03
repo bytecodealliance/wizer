@@ -48,7 +48,10 @@ struct Impl {
 }
 
 impl Impl {
-    async fn call<T: ComponentNamedList + Lift + Send + Sync>(&mut self, name: &str) -> Result<T> {
+    async fn call<T: ComponentNamedList + Lift + Send + Sync + 'static>(
+        &mut self,
+        name: &str,
+    ) -> Result<T> {
         let export = self
             .instance
             .get_export_index(&mut self.store, None, name)
