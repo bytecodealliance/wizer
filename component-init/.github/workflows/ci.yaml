@@ -1,0 +1,45 @@
+name: CI
+on:
+    pull_request:
+env:
+  RUSTFLAGS: -Dwarnings
+jobs:
+  build_and_test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-wasip2
+      - name: check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --workspace
+      - name: test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --workspace
+      - name: clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --workspace --all-targets
+  check_fmt_and_docs:
+    name: Checking Format and Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-wasip2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Docs
+        run: cargo doc

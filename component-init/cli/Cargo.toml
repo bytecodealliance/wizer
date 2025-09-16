@@ -1,0 +1,16 @@
+[package]
+name = "component-init-cli"
+description = "Tool for pre-initializing WebAssembly components: CLI"
+license.workspace = true
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "component-init"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+component-init-wasmtime.workspace = true
+tokio.workspace = true

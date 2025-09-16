@@ -1,0 +1,8 @@
+[package]
+name = "component-init"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+component-init-macro.workspace = true
+wit-bindgen.workspace = true

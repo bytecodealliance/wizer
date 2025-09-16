@@ -1,0 +1,11 @@
+[package]
+name = "test-programs-artifacts"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+
+[build-dependencies]
+cargo_metadata = "0.18"
+heck = "0.5"

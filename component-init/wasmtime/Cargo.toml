@@ -1,0 +1,18 @@
+[package]
+name = "component-init-wasmtime"
+description = "Tool for pre-initializing WebAssembly components: Wasmtime integration"
+license.workspace = true
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+component-init-transform.workspace = true
+wasmtime.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+test-programs-artifacts.workspace = true
+wat.workspace = true
+wasmtime-wasi.workspace = true

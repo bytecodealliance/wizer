@@ -1,0 +1,14 @@
+[package]
+name = "component-init-transform"
+description = "Tool for pre-initializing WebAssembly components"
+license.workspace = true
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+wasm-encoder.workspace = true
+wasmparser.workspace = true
+wasm-metadata.workspace = true
