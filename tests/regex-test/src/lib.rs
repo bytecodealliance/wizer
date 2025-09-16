@@ -13,6 +13,7 @@ pub fn init() {
 #[no_mangle]
 pub fn run(n: i32) -> i32 {
     let s = format!("{}", n);
+    #[expect(static_mut_refs, reason = "single threaded")]
     let regex = unsafe { REGEX.as_ref().unwrap() };
     if regex.is_match(&s) {
         42

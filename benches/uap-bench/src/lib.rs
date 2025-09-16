@@ -33,6 +33,7 @@ pub extern "C" fn init() {
             .map(|e| e.regex.replace("\\/", "/").replace("\\!", "!")),
     )
     .unwrap();
+    #[expect(static_mut_refs, reason = "single threaded")]
     unsafe {
         assert!(UA_REGEX_SET.is_none());
         UA_REGEX_SET = Some(regex_set);
@@ -48,6 +49,7 @@ pub extern "C" fn run(ptr: *mut u8, len: usize) -> i32 {
         let slice = std::slice::from_raw_parts(ptr, len);
         std::str::from_utf8(slice).unwrap()
     };
+    #[expect(static_mut_refs, reason = "single threaded")]
     let regex_set = unsafe { UA_REGEX_SET.as_ref().unwrap() };
     regex_set.is_match(&s) as u8 as i32
 }
