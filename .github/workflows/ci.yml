@@ -39,9 +39,9 @@ jobs:
     - run: rustup update stable --no-self-update
     - run: rustup target add wasm32-wasip2
     - name: Build
-      run: cargo build --verbose --workspace
+      run: cargo build --verbose --workspace --exclude wizer-fuzz
     - name: Run tests
-      run: cargo test --verbose --workspace
+      run: cargo test --verbose --workspace --exclude wizer-fuzz
     - name: Checking benches
       run : cargo check --benches
 
