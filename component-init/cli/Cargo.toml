@@ -2,8 +2,8 @@
 name = "component-init-cli"
 description = "Tool for pre-initializing WebAssembly components: CLI"
 license.workspace = true
-version.workspace = true
 edition.workspace = true
+version = "0.2.0"
 
 [[bin]]
 name = "component-init"

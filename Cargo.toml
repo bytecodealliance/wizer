@@ -6,10 +6,10 @@ documentation = "https://docs.rs/wizer"
 edition = "2018"
 exclude = ["**.wasm"]
 homepage = "https://github.com/bytecodealliance/wizer"
-license = "Apache-2.0 WITH LLVM-exception"
+license = { workspace = true }
 name = "wizer"
 readme = "./README.md"
-repository = "https://github.com/bytecodealliance/wizer"
+repository = { workspace = true }
 version = "10.0.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -27,14 +27,14 @@ name = "uap"
 harness = false
 
 [dependencies]
-anyhow = "1.0.97"
+anyhow = { workspace = true }
 cap-std = "3.4.3"
 env_logger = { version = "0.11.8", optional = true }
 log = "0.4.27"
 rayon = "1.10.0"
 structopt = { version = "0.3.26", optional = true }
-wasm-encoder = "0.238.0"
-wasmparser = "0.238.0"
+wasm-encoder = { workspace = true }
+wasmparser = { workspace = true }
 wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true, features = ["preview1"] }
 
@@ -44,24 +44,56 @@ wasmtime-wasi = { workspace = true, features = ["preview1"] }
 workspace = true
 optional = true
 
-[workspace.dependencies]
-wasmprinter = "0.238.0"
-wasmtime = "36"
-wasmtime-wasi = "36"
-
 [dev-dependencies]
 criterion = "0.5.1"
 env_logger = "0.11.8"
 wasmprinter = { workspace = true }
-wat = "1.238.0"
+wat = { workspace = true }
+
 
 [workspace]
 members = [
     "benches/regex-bench",
     "benches/uap-bench",
+    "component-init/cli",
+    "component-init/guest-rust",
+    "component-init/guest-rust/macro",
+    "component-init/test-programs",
+    "component-init/test-programs/artifacts",
+    "component-init/transform",
+    "component-init/wasmtime",
     "fuzz",
     "tests/regex-test",
 ]
+
+[workspace.dependencies]
+anyhow = "1.0.97"
+async-trait = "0.1.83"
+clap = { version = "4", features = ["derive"] }
+component-init = { version = "0.2.0", path = "./component-init/guest-rust" }
+component-init-macro = { version = "0.2.0", path = "./component-init/guest-rust/macro" }
+component-init-transform = { version = "0.2.0", path = "./component-init/transform" }
+component-init-wasmtime =  { version = "0.2.0", path = "./component-init/wasmtime" }
+futures = "0.3.31"
+quote = "1.0"
+syn = "2.0"
+test-programs = { path = "./component-init/test-programs" }
+test-programs-artifacts = { path = "./component-init/test-programs/artifacts" }
+tokio = { version = "1", features = ["full"] }
+wasm-encoder = { version = "0.238.1", features = ["wasmparser"] }
+wasmparser = "0.238.1"
+wasmprinter = "0.238.1"
+wasmtime = "36"
+wasmtime-wasi = "36"
+wasmtime-wasi-http = "36"
+wat = "1.238.1"
+wit-bindgen = "0.46.0"
+wasm-metadata = "0.238.1"
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0 WITH LLVM-exception" 
+repository = "https://github.com/bytecodealliance/wizer"
 
 [profile.bench]
 debug = true

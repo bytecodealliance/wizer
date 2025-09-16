@@ -2,8 +2,8 @@
 name = "component-init-wasmtime"
 description = "Tool for pre-initializing WebAssembly components: Wasmtime integration"
 license.workspace = true
-version.workspace = true
 edition.workspace = true
+version = "0.2.0"
 
 [dependencies]
 anyhow.workspace = true

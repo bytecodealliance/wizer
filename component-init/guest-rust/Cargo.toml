@@ -1,7 +1,8 @@
 [package]
 name = "component-init"
-version.workspace = true
 edition.workspace = true
+license.workspace = true
+version = "0.2.0"
 
 [dependencies]
 component-init-macro.workspace = true

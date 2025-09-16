@@ -4,9 +4,11 @@ on: pull_request
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
 
 jobs:
   build:
+    name: Build and test
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -32,14 +34,17 @@ jobs:
           target: s390x-unknown-linux-gnu
     steps:
     - uses: actions/checkout@v2
+    - run: rustup update stable --no-self-update
+    - run: rustup target add wasm32-wasip2
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --workspace
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --workspace
     - name: Checking benches
       run : cargo check --benches
 
   check_fuzz:
+    name: Checking fuzz
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -47,6 +52,7 @@ jobs:
     - run: cargo fuzz build --dev -s none
 
   rustfmt:
+    name: Checking format and docs
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -54,3 +60,4 @@ jobs:
     - run: rustup default stable
     - run: rustup component add rustfmt
     - run: cargo fmt --all -- --check
+    - run: cargo doc
