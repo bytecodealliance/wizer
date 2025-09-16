@@ -33,7 +33,9 @@ jobs:
           os: ubuntu-latest
           target: s390x-unknown-linux-gnu
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
     - run: rustup update stable --no-self-update
     - run: rustup target add wasm32-wasip2
     - name: Build
