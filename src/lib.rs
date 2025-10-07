@@ -669,6 +669,13 @@ impl Wizer {
         config.wasm_tail_call(true);
         config.wasm_extended_const(true);
 
+        // The spec requires relaxed-simd instructions to be deterministic
+        // within a run. We don't have any way configure the nondeterminism
+        // of the code after a snapshot restore, however we can at least
+        // use deterministic lowerings so that if the subsequent engine
+        // also uses deterministic lowerings, it'll match.
+        config.relaxed_simd_deterministic(true);
+
         // Proposals that we should add support for.
         config.wasm_threads(false);
 
