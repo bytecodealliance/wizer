@@ -43,6 +43,7 @@ const DEFAULT_WASM_MULTI_VALUE: bool = true;
 const DEFAULT_WASM_MULTI_MEMORY: bool = true;
 const DEFAULT_WASM_BULK_MEMORY: bool = true;
 const DEFAULT_WASM_SIMD: bool = true;
+const DEFAULT_WASM_RELAXED_SIMD: bool = false;
 const DEFAULT_WASM_REFERENCE_TYPES: bool = true;
 
 /// The type of data that is stored in the `wasmtime::Store` during
@@ -139,6 +140,18 @@ pub struct Wizer {
     /// rather than per-instance.
     #[cfg_attr(feature = "structopt", structopt(long = "allow-wasi"))]
     allow_wasi: bool,
+
+    /// Use deterministic behavior for relaxed SIMD instructions.
+    ///
+    /// The relaxed SIMD instructions in Wasm are instructions which are
+    /// permitted to have different results when run on different host
+    /// CPU architectures. This flag tells wizer to instead execute relaxed
+    /// SIMD instructions according to the [deterministic profile], which
+    /// ensures that they're deterministic and platform-independent.
+    ///
+    /// [deterministic profile]: https://webassembly.github.io/spec/core/appendix/profiles.html#deterministic-profile-small-mathrm-det
+    #[cfg_attr(feature = "structopt", structopt(long = "relaxed-simd-deterministic"))]
+    relaxed_simd_deterministic: bool,
 
     /// Provide an additional preloaded module that is available to the
     /// main module.
@@ -252,6 +265,13 @@ pub struct Wizer {
     #[cfg_attr(feature = "structopt", structopt(long, value_name = "true|false"))]
     wasm_simd: Option<bool>,
 
+    /// Enable or disable the Wasm relaxed SIMD proposal.
+    ///
+    /// Disabled by default. When enabled, by default relaxed SIMD instructions
+    /// will produce different results on different platforms. For deterministic
+    /// results, additionally enable the `--relaxed-simd-deterministic` flag.
+    wasm_relaxed_simd: Option<bool>,
+
     /// Enable or disable the Wasm reference-types proposal.
     ///
     /// Currently does not implement snapshotting or the use of references,
@@ -269,6 +289,7 @@ impl std::fmt::Debug for Wizer {
             init_func,
             func_renames,
             allow_wasi,
+            relaxed_simd_deterministic,
             preload,
             preload_bytes,
             make_linker: _,
@@ -281,12 +302,14 @@ impl std::fmt::Debug for Wizer {
             wasm_multi_value,
             wasm_bulk_memory,
             wasm_simd,
+            wasm_relaxed_simd,
             wasm_reference_types,
         } = self;
         f.debug_struct("Wizer")
             .field("init_func", &init_func)
             .field("func_renames", &func_renames)
             .field("allow_wasi", &allow_wasi)
+            .field("relaxed_simd_deterministic", &relaxed_simd_deterministic)
             .field("preload", &preload)
             .field("preload_bytes", &preload_bytes)
             .field("make_linker", &"..")
@@ -299,6 +322,7 @@ impl std::fmt::Debug for Wizer {
             .field("wasm_multi_value", &wasm_multi_value)
             .field("wasm_bulk_memory", &wasm_bulk_memory)
             .field("wasm_simd", &wasm_simd)
+            .field("wasm_relaxed_simd", &wasm_relaxed_simd)
             .field("wasm_reference_types", &wasm_reference_types)
             .finish()
     }
@@ -352,6 +376,7 @@ impl Wizer {
             init_func: "wizer.initialize".into(),
             func_renames: vec![],
             allow_wasi: false,
+            relaxed_simd_deterministic: false,
             preload: vec![],
             preload_bytes: vec![],
             make_linker: None,
@@ -364,6 +389,7 @@ impl Wizer {
             wasm_multi_value: None,
             wasm_bulk_memory: None,
             wasm_simd: None,
+            wasm_relaxed_simd: None,
             wasm_reference_types: None,
         }
     }
@@ -403,6 +429,19 @@ impl Wizer {
         );
         self.allow_wasi = allow;
         Ok(self)
+    }
+
+    /// Use deterministic behavior for relaxed SIMD instructions.
+    ///
+    /// The relaxed SIMD instructions in Wasm are instructions which are
+    /// permitted to have different results when run on different host
+    /// CPU architectures. This flag tells wizer to instead execute relaxed
+    /// SIMD instructions according to the [deterministic profile], which
+    /// ensures that they're deterministic and platform-independent.
+    ///
+    /// [deterministic profile]: https://webassembly.github.io/spec/core/appendix/profiles.html#deterministic-profile-small-mathrm-det
+    pub fn relaxed_simd_deterministic(&mut self, deterministic: bool) {
+        self.relaxed_simd_deterministic = deterministic;
     }
 
     /// Provide an additional preloaded module that is available to the
@@ -583,6 +622,15 @@ impl Wizer {
         self
     }
 
+    /// Enable or disable the Wasm relaxed SIMD proposal.
+    ///
+    /// Defaults to `false`. When enabling, consdider whether to additionally
+    /// use `relaxed_simd_deterministic`.
+    pub fn wasm_relaxed_simd(&mut self, enable: bool) -> &mut Self {
+        self.wasm_relaxed_simd = Some(enable);
+        self
+    }
+
     /// Initialize the given Wasm, snapshot it, and return the serialized
     /// snapshot as a new, pre-initialized Wasm module.
     pub fn run(&self, wasm: &[u8]) -> anyhow::Result<Vec<u8>> {
@@ -658,6 +706,7 @@ impl Wizer {
         config.wasm_bulk_memory(self.wasm_bulk_memory.unwrap_or(DEFAULT_WASM_BULK_MEMORY));
 
         config.wasm_simd(self.wasm_simd.unwrap_or(DEFAULT_WASM_SIMD));
+        config.wasm_relaxed_simd(self.wasm_relaxed_simd.unwrap_or(DEFAULT_WASM_RELAXED_SIMD));
 
         // Note that reference_types are not actually supported,
         // but many compilers now enable them by default
@@ -669,12 +718,8 @@ impl Wizer {
         config.wasm_tail_call(true);
         config.wasm_extended_const(true);
 
-        // The spec requires relaxed-simd instructions to be deterministic
-        // within a run. We don't have any way configure the nondeterminism
-        // of the code after a snapshot restore, however we can at least
-        // use deterministic lowerings so that if the subsequent engine
-        // also uses deterministic lowerings, it'll match.
-        config.relaxed_simd_deterministic(true);
+        // Enable `relaxed_simd_deterministic` if requested.
+        config.relaxed_simd_deterministic(self.relaxed_simd_deterministic);
 
         // Proposals that we should add support for.
         config.wasm_threads(false);
@@ -710,6 +755,7 @@ impl Wizer {
 
         features.set(WasmFeatures::TAIL_CALL, true);
         features.set(WasmFeatures::EXTENDED_CONST, true);
+        features.set(WasmFeatures::RELAXED_SIMD, true);
 
         return features;
     }
