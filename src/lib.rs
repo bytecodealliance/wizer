@@ -270,6 +270,7 @@ pub struct Wizer {
     /// Disabled by default. When enabled, by default relaxed SIMD instructions
     /// will produce different results on different platforms. For deterministic
     /// results, additionally enable the `--relaxed-simd-deterministic` flag.
+    #[cfg_attr(feature = "structopt", structopt(long, value_name = "true|false"))]
     wasm_relaxed_simd: Option<bool>,
 
     /// Enable or disable the Wasm reference-types proposal.
