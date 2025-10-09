@@ -755,7 +755,10 @@ impl Wizer {
 
         features.set(WasmFeatures::TAIL_CALL, true);
         features.set(WasmFeatures::EXTENDED_CONST, true);
-        features.set(WasmFeatures::RELAXED_SIMD, true);
+        features.set(
+            WasmFeatures::RELAXED_SIMD,
+            self.wasm_relaxed_simd.unwrap_or(DEFAULT_WASM_RELAXED_SIMD),
+        );
 
         return features;
     }
