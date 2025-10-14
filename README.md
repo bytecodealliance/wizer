@@ -31,6 +31,12 @@
 
 ## About
 
+> **Note**: Development of Wizer has moved upstream into the [Wasmtime
+> repository](https://github.com/bytecodealliance/wasmtime). The source code can
+> be found in [the `crates/wizer`
+> subdirectory](https://github.com/bytecodealliance/wasmtime/tree/main/crates/wizer).
+> The `wasmtime wizer` subcommand replaces the `wizer` CLI for future use.
+
 Don't wait for your Wasm module to initialize itself, pre-initialize it! Wizer
 instantiates your WebAssembly module, executes its initialization function, and
 then snapshots the initialized state out into a new WebAssembly module. Now you
