@@ -1,34 +1,14 @@
 use anyhow::{anyhow, Context, Result};
-use std::rc::Rc;
 use wasmtime_wasi::WasiCtxBuilder;
 use wat::parse_str as wat_to_wasm;
 use wizer::Wizer;
 
 fn get_wizer() -> Wizer {
-    let mut wizer = Wizer::new();
-    wizer
-        .make_linker(Some(Rc::new(|e: &wasmtime::Engine| {
-            let mut linker = wasmtime::Linker::new(e);
-            linker.func_wrap("foo", "bar", |x: i32| x + 1)?;
-            Ok(linker)
-        })))
-        .unwrap();
-    wizer
+    Wizer::new()
 }
 
 fn run_wasm(args: &[wasmtime::Val], expected: i32, wasm: &[u8]) -> Result<()> {
     let _ = env_logger::try_init();
-
-    let wasm = get_wizer().run(&wasm)?;
-    log::debug!(
-        "=== Wizened Wasm ==========================================================\n\
-       {}\n\
-       ===========================================================================",
-        wasmprinter::print_bytes(&wasm).unwrap()
-    );
-    if log::log_enabled!(log::Level::Debug) {
-        std::fs::write("test.wasm", &wasm).unwrap();
-    }
 
     let mut config = wasmtime::Config::new();
     wasmtime::Cache::from_file(None)
@@ -40,6 +20,22 @@ fn run_wasm(args: &[wasmtime::Val], expected: i32, wasm: &[u8]) -> Result<()> {
     let engine = wasmtime::Engine::new(&config)?;
     let wasi_ctx = WasiCtxBuilder::new().build_p1();
     let mut store = wasmtime::Store::new(&engine, wasi_ctx);
+
+    let wasm = get_wizer().run(&mut store, &wasm, |store, module| {
+        let mut linker = wasmtime::Linker::new(store.engine());
+        linker.func_wrap("foo", "bar", |x: i32| x + 1)?;
+        linker.instantiate(store, module)
+    })?;
+    log::debug!(
+        "=== Wizened Wasm ==========================================================\n\
+       {}\n\
+       ===========================================================================",
+        wasmprinter::print_bytes(&wasm).unwrap()
+    );
+    if log::log_enabled!(log::Level::Debug) {
+        std::fs::write("test.wasm", &wasm).unwrap();
+    }
+
     let module =
         wasmtime::Module::new(store.engine(), wasm).context("Wasm test case failed to compile")?;
 
@@ -97,28 +93,4 @@ fn custom_linker() -> Result<()> {
   )
 )"#,
     )
-}
-
-#[test]
-#[should_panic]
-fn linker_and_wasi() {
-    Wizer::new()
-        .make_linker(Some(Rc::new(|e: &wasmtime::Engine| {
-            Ok(wasmtime::Linker::new(e))
-        })))
-        .unwrap()
-        .allow_wasi(true)
-        .unwrap();
-}
-
-#[test]
-#[should_panic]
-fn wasi_and_linker() {
-    Wizer::new()
-        .allow_wasi(true)
-        .unwrap()
-        .make_linker(Some(Rc::new(|e: &wasmtime::Engine| {
-            Ok(wasmtime::Linker::new(e))
-        })))
-        .unwrap();
 }

@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use wasm_encoder::ConstExpr;
-use wasmtime_wasi::{preview1, WasiCtxBuilder};
+use wasmtime_wasi::{p1, WasiCtxBuilder};
 use wat::parse_str as wat_to_wasm;
-use wizer::{StoreData, Wizer};
+use wizer::Wizer;
 
 fn run_wat(args: &[wasmtime::Val], expected: i32, wat: &str) -> Result<()> {
     let _ = env_logger::try_init();
@@ -11,11 +11,25 @@ fn run_wat(args: &[wasmtime::Val], expected: i32, wat: &str) -> Result<()> {
 }
 
 fn get_wizer() -> Wizer {
-    let mut wizer = Wizer::new();
-    wizer.allow_wasi(true).unwrap();
-    wizer.wasm_multi_memory(true);
-    wizer.wasm_bulk_memory(true);
-    wizer
+    Wizer::new()
+}
+
+fn store() -> Result<wasmtime::Store<p1::WasiP1Ctx>> {
+    let mut wasi = WasiCtxBuilder::new();
+    let mut config = wasmtime::Config::new();
+    config.relaxed_simd_deterministic(true);
+    let engine = wasmtime::Engine::new(&config)?;
+    Ok(wasmtime::Store::new(&engine, wasi.build_p1()))
+}
+
+fn instantiate(
+    store: &mut wasmtime::Store<p1::WasiP1Ctx>,
+    module: &wasmtime::Module,
+) -> Result<wasmtime::Instance> {
+    let mut linker = wasmtime::Linker::new(store.engine());
+    p1::add_to_linker_sync(&mut linker, |x| x)?;
+    linker.define_unknown_imports_as_traps(module)?;
+    linker.instantiate(store, module)
 }
 
 fn wizen_and_run_wasm(
@@ -26,13 +40,24 @@ fn wizen_and_run_wasm(
 ) -> Result<()> {
     let _ = env_logger::try_init();
 
+    let mut config = wasmtime::Config::new();
+    wasmtime::Cache::from_file(None)
+        .map(|cache| config.cache(Some(cache)))
+        .unwrap();
+    config.wasm_multi_memory(true);
+    config.wasm_multi_value(true);
+
+    let engine = wasmtime::Engine::new(&config)?;
+    let wasi_ctx = WasiCtxBuilder::new().build_p1();
+    let mut store = wasmtime::Store::new(&engine, wasi_ctx);
+
     log::debug!(
         "=== PreWizened Wasm ==========================================================\n\
       {}\n\
       ===========================================================================",
         wasmprinter::print_bytes(&wasm).unwrap()
     );
-    let wasm = wizer.run(&wasm)?;
+    let wasm = wizer.run(&mut store, &wasm, instantiate)?;
     log::debug!(
         "=== Wizened Wasm ==========================================================\n\
       {}\n\
@@ -43,21 +68,6 @@ fn wizen_and_run_wasm(
         std::fs::write("test.wasm", &wasm).unwrap();
     }
 
-    let mut config = wasmtime::Config::new();
-    wasmtime::Cache::from_file(None)
-        .map(|cache| config.cache(Some(cache)))
-        .unwrap();
-    config.wasm_multi_memory(true);
-    config.wasm_multi_value(true);
-
-    let engine = wasmtime::Engine::new(&config)?;
-    let wasi_ctx = WasiCtxBuilder::new().build_p1();
-    let mut store = wasmtime::Store::new(
-        &engine,
-        StoreData {
-            wasi_ctx: Some(wasi_ctx),
-        },
-    );
     let module =
         wasmtime::Module::new(store.engine(), wasm).context("Wasm test case failed to compile")?;
 
@@ -69,7 +79,7 @@ fn wizen_and_run_wasm(
         .define_name(&mut store, "f", thunk)?
         .define(&mut store, "x", "f", thunk)?;
 
-    preview1::add_to_linker_sync(&mut linker, |wasi| wasi.wasi_ctx.as_mut().unwrap())?;
+    p1::add_to_linker_sync(&mut linker, |wasi| wasi)?;
 
     let instance = linker.instantiate(&mut store, &module)?;
 
@@ -108,7 +118,7 @@ fn fails_wizening(wat: &str) -> Result<()> {
         .context("initial Wasm should be valid")?;
 
     anyhow::ensure!(
-        get_wizer().run(&wasm).is_err(),
+        get_wizer().run(&mut store()?, &wasm, instantiate).is_err(),
         "Expected an error when wizening, but didn't get one"
     );
     Ok(())
@@ -239,43 +249,6 @@ fn reject_table_copy() -> Result<()> {
 }
 
 #[test]
-fn reject_table_get_set() -> Result<()> {
-    let wat = r#"
-(module
-  (table 3 funcref)
-
-  (func $f (result i32) (i32.const 0))
-  (func $g (result i32) (i32.const 0))
-  (func $h (result i32) (i32.const 0))
-
-  (func (export "main")
-    i32.const 0
-    i32.const 1
-    table.get
-    table.set)
-
-  (elem (i32.const 0) $f $g $h)
-)
-"#;
-
-    let _ = env_logger::try_init();
-    let mut wizer = Wizer::new();
-    wizer.wasm_reference_types(false);
-
-    let wasm = wat_to_wasm(wat)?;
-    let result = wizen_and_run_wasm(&[], 42, &wasm, wizer);
-
-    assert!(result.is_err());
-
-    let err = result.unwrap_err();
-    assert!(err
-        .to_string()
-        .contains("reference types support is not enabled"),);
-
-    Ok(())
-}
-
-#[test]
 fn reject_table_get_set_with_reference_types_enabled() -> Result<()> {
     let result = run_wat(
         &[],
@@ -302,7 +275,7 @@ fn reject_table_get_set_with_reference_types_enabled() -> Result<()> {
     let err = result.unwrap_err();
     assert!(err
         .to_string()
-        .contains("unsupported `table.get` instruction"),);
+        .contains("unsupported `table.set` instruction"),);
 
     Ok(())
 }
@@ -322,8 +295,7 @@ fn reject_table_grow_with_reference_types_enabled() -> anyhow::Result<()> {
       )"#;
 
     let _ = env_logger::try_init();
-    let mut wizer = Wizer::new();
-    wizer.wasm_reference_types(true);
+    let wizer = Wizer::new();
 
     let wasm = wat_to_wasm(wat)?;
     let result = wizen_and_run_wasm(&[], 42, &wasm, wizer);
@@ -333,7 +305,7 @@ fn reject_table_grow_with_reference_types_enabled() -> anyhow::Result<()> {
     let err = result.unwrap_err();
     assert!(err
         .to_string()
-        .contains("unsupported `ref.func` instruction"));
+        .contains("unsupported `table.grow` instruction"));
 
     Ok(())
 }
@@ -357,9 +329,7 @@ fn indirect_call_with_reference_types() -> anyhow::Result<()> {
       )"#;
 
     let _ = env_logger::try_init();
-    let mut wizer = Wizer::new();
-    wizer.wasm_reference_types(true);
-    wizer.wasm_bulk_memory(true);
+    let wizer = Wizer::new();
 
     let wasm = wat_to_wasm(wat)?;
     wizen_and_run_wasm(&[], 42, &wasm, wizer)
@@ -548,10 +518,9 @@ fn rename_functions() -> Result<()> {
 
     let wasm = wat_to_wasm(wat)?;
     let mut wizer = Wizer::new();
-    wizer.allow_wasi(true).unwrap();
     wizer.func_rename("func_a", "func_b");
     wizer.func_rename("func_b", "func_c");
-    let wasm = wizer.run(&wasm)?;
+    let wasm = wizer.run(&mut store()?, &wasm, instantiate)?;
     let wat = wasmprinter::print_bytes(&wasm)?;
 
     let expected_wat = r#"
@@ -851,9 +820,7 @@ fn relaxed_simd_deterministic() -> Result<()> {
 )
         "#,
     )?;
-    let mut wizer = get_wizer();
-    wizer.wasm_relaxed_simd(true);
-    wizer.relaxed_simd_deterministic(true);
+    let wizer = get_wizer();
 
     // We'll get 0x4b000003 if we have the deterministic `relaxed_madd`
     // semantics. We might get 0x4b000002 if we don't.

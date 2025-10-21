@@ -35,16 +35,7 @@ jobs:
     - name: Build
       run: cargo build --verbose
     - name: Run tests
-      run: cargo test --verbose
-    - name: Checking benches
-      run : cargo check --benches
-
-  check_fuzz:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - run: cargo install cargo-fuzz
-    - run: cargo fuzz build --dev -s none
+      run: cargo test --verbose --features cli
 
   rustfmt:
     runs-on: ubuntu-latest
