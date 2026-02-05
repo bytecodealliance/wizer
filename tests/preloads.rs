@@ -1,4 +1,5 @@
 use anyhow::Result;
+use wasmtime::error::Context as _;
 use wasmtime::{Instance, Linker, Module};
 use wasmtime_wizer::Wizer;
 use wat::parse_str as wat_to_wasm;
@@ -19,21 +20,25 @@ const PRELOAD2: &'static str = r#"
   i32.add))
   "#;
 
-fn run_with_preloads(args: &[wasmtime::Val], wat: &str) -> Result<wasmtime::Val> {
+async fn run_with_preloads(args: &[wasmtime::Val], wat: &str) -> Result<wasmtime::Val> {
     let wasm = wat_to_wasm(wat)?;
     let engine = wasmtime::Engine::default();
     let mut store = wasmtime::Store::new(&engine, ());
     let mod1 = Module::new(store.engine(), PRELOAD1)?;
     let mod2 = Module::new(store.engine(), PRELOAD2)?;
 
-    let processed = Wizer::new().run(&mut store, &wasm, |store, module| {
-        let i1 = Instance::new(&mut *store, &mod1, &[])?;
-        let i2 = Instance::new(&mut *store, &mod2, &[])?;
-        let mut linker = Linker::new(store.engine());
-        linker.instance(&mut *store, "mod1", i1)?;
-        linker.instance(&mut *store, "mod2", i2)?;
-        linker.instantiate(store, module)
-    })?;
+    let mut wizer = Wizer::new();
+    wizer.init_func("wizer.initialize");
+    let processed = wizer
+        .run(&mut store, &wasm, async |mut store, module| {
+            let i1 = Instance::new(&mut store, &mod1, &[]).context("failed to create instance")?;
+            let i2 = Instance::new(&mut store, &mod2, &[]).context("failed to create instance")?;
+            let mut linker = Linker::new(store.engine());
+            linker.instance(&mut store, "mod1", i1)?;
+            linker.instance(&mut store, "mod2", i2)?;
+            linker.instantiate(store, module)
+        })
+        .await?;
 
     let testmod = wasmtime::Module::new(&engine, &processed[..])?;
 
@@ -48,12 +53,13 @@ fn run_with_preloads(args: &[wasmtime::Val], wat: &str) -> Result<wasmtime::Val>
         .get_func(&mut store, "run")
         .ok_or_else(|| anyhow::anyhow!("no `run` function on test module"))?;
     let mut returned = vec![wasmtime::Val::I32(0)];
-    run.call(&mut store, args, &mut returned)?;
+    run.call(&mut store, args, &mut returned)
+        .context("call failed")?;
     Ok(returned[0])
 }
 
-#[test]
-fn test_preloads() {
+#[tokio::test]
+async fn test_preloads() -> Result<()> {
     const WAT: &'static str = r#"
     (module
      (import "mod1" "f" (func $mod1f (param i32) (result i32)))
@@ -80,6 +86,7 @@ fn test_preloads() {
     "#;
 
     let result =
-        run_with_preloads(&[wasmtime::Val::I32(200), wasmtime::Val::I32(201)], WAT).unwrap();
+        run_with_preloads(&[wasmtime::Val::I32(200), wasmtime::Val::I32(201)], WAT).await?;
     assert!(matches!(result, wasmtime::Val::I32(607)));
+    Ok(())
 }

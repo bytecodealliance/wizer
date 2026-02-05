@@ -1,9 +1,9 @@
-use anyhow::Context;
-use anyhow::Result;
-use clap::Parser;
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
+
+use anyhow::{anyhow, Context as _, Result};
+use clap::Parser;
 use wizer::Wizer;
 
 #[derive(Parser)]
@@ -168,7 +168,8 @@ fn optional_flag_with_default(flag: Option<Option<bool>>, default: bool) -> bool
     }
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     env_logger::init();
     let options = Options::parse();
 
@@ -245,12 +246,15 @@ fn main() -> anyhow::Result<()> {
     for preload in options.preload.iter() {
         if let Some((name, value)) = preload.split_once('=') {
             let module = wasmtime::Module::from_file(&engine, value)
+                .map_err(|e| anyhow!(e))
                 .context("failed to parse preload module")?;
             let instance = linker
                 .instantiate(&mut store, &module)
+                .map_err(|e| anyhow!(e))
                 .context("failed to instantiate preload module")?;
             linker
                 .instance(&mut store, name, instance)
+                .map_err(|e| anyhow!(e))
                 .context("failed to add preload's exports to linker")?;
         } else {
             anyhow::bail!(
@@ -262,10 +266,12 @@ fn main() -> anyhow::Result<()> {
 
     let output_wasm = options
         .wizer
-        .run(&mut store, &input_wasm, |store, module| {
+        .run(&mut store, &input_wasm, async |store, module| {
             linker.define_unknown_imports_as_traps(module)?;
             linker.instantiate(store, module)
-        })?;
+        })
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     output
         .write_all(&output_wasm)
