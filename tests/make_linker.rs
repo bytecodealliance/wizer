@@ -25,7 +25,7 @@ async fn run_wasm(args: &[wasmtime::Val], expected: i32, wasm: &[u8]) -> Result<
     let mut store = wasmtime::Store::new(&engine, wasi_ctx);
 
     let wasm = get_wizer()
-        .run(&mut store, &wasm, async |store, module| {
+        .run(&mut store, wasm, async |store, module| {
             let mut linker = wasmtime::Linker::new(store.engine());
             linker.func_wrap("foo", "bar", |x: i32| x + 1)?;
             linker.instantiate(store, module)

@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use clap::Parser;
 use wasmtime::error::Context;
 use wizer::Wizer;

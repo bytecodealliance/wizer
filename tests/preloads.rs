@@ -4,7 +4,7 @@ use wasmtime::{Instance, Linker, Module};
 use wasmtime_wizer::Wizer;
 use wat::parse_str as wat_to_wasm;
 
-const PRELOAD1: &'static str = r#"
+const PRELOAD1: &str = r#"
 (module
  (func (export "f") (param i32) (result i32)
   local.get 0
@@ -12,7 +12,7 @@ const PRELOAD1: &'static str = r#"
   i32.add))
   "#;
 
-const PRELOAD2: &'static str = r#"
+const PRELOAD2: &str = r#"
 (module
  (func (export "f") (param i32) (result i32)
   local.get 0
@@ -60,7 +60,7 @@ async fn run_with_preloads(args: &[wasmtime::Val], wat: &str) -> Result<wasmtime
 
 #[tokio::test]
 async fn test_preloads() -> Result<()> {
-    const WAT: &'static str = r#"
+    const WAT: &str = r#"
     (module
      (import "mod1" "f" (func $mod1f (param i32) (result i32)))
      (import "mod2" "f" (func $mod2f (param i32) (result i32)))

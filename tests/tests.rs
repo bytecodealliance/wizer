@@ -58,10 +58,10 @@ async fn wizen_and_run_wasm(
         "=== PreWizened Wasm ==========================================================\n\
       {}\n\
       ===========================================================================",
-        wasmprinter::print_bytes(&wasm).unwrap()
+        wasmprinter::print_bytes(wasm).unwrap()
     );
 
-    let wasm = wizer.run(&mut store, &wasm, instantiate).await?;
+    let wasm = wizer.run(&mut store, wasm, instantiate).await?;
 
     log::debug!(
         "=== Wizened Wasm ==========================================================\n\
