@@ -2,8 +2,9 @@ use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{anyhow, Result};
 use clap::Parser;
+use wasmtime::error::Context;
 use wizer::Wizer;
 
 #[derive(Parser)]
@@ -246,15 +247,12 @@ async fn main() -> Result<()> {
     for preload in options.preload.iter() {
         if let Some((name, value)) = preload.split_once('=') {
             let module = wasmtime::Module::from_file(&engine, value)
-                .map_err(|e| anyhow!(e))
                 .context("failed to parse preload module")?;
             let instance = linker
                 .instantiate(&mut store, &module)
-                .map_err(|e| anyhow!(e))
                 .context("failed to instantiate preload module")?;
             linker
                 .instance(&mut store, name, instance)
-                .map_err(|e| anyhow!(e))
                 .context("failed to add preload's exports to linker")?;
         } else {
             anyhow::bail!(
@@ -270,8 +268,7 @@ async fn main() -> Result<()> {
             linker.define_unknown_imports_as_traps(module)?;
             linker.instantiate(store, module)
         })
-        .await
-        .map_err(|e| anyhow!(e))?;
+        .await?;
 
     output
         .write_all(&output_wasm)

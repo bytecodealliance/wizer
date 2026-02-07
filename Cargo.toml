@@ -23,7 +23,7 @@ anyhow = { workspace = true, optional = true }
 clap = { workspace = true, optional = true, features = ['derive'] }
 env_logger = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["macros"] }
-wasmtime = { workspace = true, features = ["async"] }
+wasmtime = { workspace = true, features = ["async", "anyhow"] }
 wasmtime-wasi = { workspace = true, features = ["p1"] }
 wasmtime-wizer = { workspace = true, features = ["wasmtime"] }
 
