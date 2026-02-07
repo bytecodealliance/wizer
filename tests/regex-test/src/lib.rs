@@ -1,19 +1,20 @@
 use regex::Regex;
+use std::sync::OnceLock;
 
 /// A regex that matches numbers that start with "1".
-static mut REGEX: Option<Regex> = None;
+static REGEX: OnceLock<Regex> = OnceLock::new();
 
 #[export_name = "wizer.initialize"]
 pub fn init() {
-    unsafe {
-        REGEX = Some(Regex::new(r"^1\d*$").unwrap());
-    }
+    REGEX.get_or_init(|| Regex::new(r"^1\d*$").expect("failed to compile regex"));
 }
 
 #[no_mangle]
 pub fn run(n: i32) -> i32 {
     let s = format!("{}", n);
-    let regex = unsafe { REGEX.as_ref().unwrap() };
+    let regex = REGEX
+        .get()
+        .expect("regex should have been initialized at wizering");
     if regex.is_match(&s) {
         42
     } else {
