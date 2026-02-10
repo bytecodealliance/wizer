@@ -19,12 +19,13 @@ name = "wizer"
 required-features = ["cli"]
 
 [dependencies]
-anyhow = { version = "1.0.97", optional = true }
-env_logger = { version = "0.11.8", optional = true }
-clap = { version = "4.5", optional = true, features = ['derive'] }
-wasmtime = { workspace = true }
-wasmtime-wizer = { workspace = true }
+anyhow = { workspace = true, optional = true }
+clap = { workspace = true, optional = true, features = ['derive'] }
+env_logger = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["macros"] }
+wasmtime = { workspace = true, features = ["async", "anyhow"] }
 wasmtime-wasi = { workspace = true, features = ["p1"] }
+wasmtime-wizer = { workspace = true, features = ["wasmtime"] }
 
 [features]
 # Enable this dependency to get messages with WAT disassemblies when certain
@@ -34,25 +35,39 @@ wasmprinter = ['wasmtime-wizer/wasmprinter']
 cli = ['dep:clap', 'dep:env_logger', 'dep:anyhow', 'wasmtime-wizer/clap']
 
 [workspace.dependencies]
-wasmprinter = "0.238.0"
-wasmtime = { git = 'https://github.com/bytecodealliance/wasmtime' }
-wasmtime-wasi = { git = 'https://github.com/bytecodealliance/wasmtime' }
-wasmtime-wizer = { git = 'https://github.com/bytecodealliance/wasmtime' }
+anyhow = { version = "1.0.97" }
+clap = { version = "4.5" }
+criterion = { version = "0.5.1" }
+env_logger = { version = "0.11.8" }
+log = { version = "0.4.27" }
+wasm-encoder = { version = "0.244.0" }
+wasmparser = { version = "0.244.0" }
+wasmprinter = { version = "0.244.0" }
+
+# TODO: remove once wasmtime releases 42.0.0
+#wasmtime = { version = "42.0.0" }
+#wasmtime-wasi = { version = "42.0.0" }
+#wasmtime-wizer = { version = "42.0.0" }
+
+wasmtime = { git = "https://github.com/bytecodealliance/wasmtime" }
+wasmtime-wasi = { git = "https://github.com/bytecodealliance/wasmtime" }
+wasmtime-wizer = { git = "https://github.com/bytecodealliance/wasmtime" }
+
+wat = { version = "1.244.0" }
+tokio = { version = "1.49.0" }
 
 [dev-dependencies]
-log = "0.4.27"
-anyhow = "1.0.97"
-criterion = "0.5.1"
-env_logger = "0.11.8"
+anyhow = { workspace = true }
+criterion = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }
+wasm-encoder = { workspace = true }
+wasmparser = { workspace = true }
 wasmprinter = { workspace = true }
-wat = "1.238.0"
-wasm-encoder = "0.238.0"
-wasmparser = "0.238.0"
+wat = { workspace = true }
 
 [workspace]
-members = [
-    "tests/regex-test",
-]
+members = ["tests/regex-test"]
 
 [profile.bench]
 debug = true
