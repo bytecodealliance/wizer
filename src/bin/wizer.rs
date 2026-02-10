@@ -1,9 +1,10 @@
-use anyhow::Context;
-use anyhow::Result;
-use clap::Parser;
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
+
+use anyhow::Result;
+use clap::Parser;
+use wasmtime::error::Context;
 use wizer::Wizer;
 
 #[derive(Parser)]
@@ -168,7 +169,8 @@ fn optional_flag_with_default(flag: Option<Option<bool>>, default: bool) -> bool
     }
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     env_logger::init();
     let options = Options::parse();
 
@@ -262,10 +264,11 @@ fn main() -> anyhow::Result<()> {
 
     let output_wasm = options
         .wizer
-        .run(&mut store, &input_wasm, |store, module| {
+        .run(&mut store, &input_wasm, async |store, module| {
             linker.define_unknown_imports_as_traps(module)?;
             linker.instantiate(store, module)
-        })?;
+        })
+        .await?;
 
     output
         .write_all(&output_wasm)
