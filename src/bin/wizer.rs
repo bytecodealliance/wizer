@@ -241,7 +241,7 @@ async fn main() -> Result<()> {
 
     let mut linker = wasmtime::Linker::new(store.engine());
     if options.allow_wasi {
-        wasmtime_wasi::p1::add_to_linker_sync(&mut linker, |x| x)?;
+        wasmtime_wasi::p1::add_to_linker_async(&mut linker, |x| x)?;
     }
 
     for preload in options.preload.iter() {
@@ -249,7 +249,8 @@ async fn main() -> Result<()> {
             let module = wasmtime::Module::from_file(&engine, value)
                 .context("failed to parse preload module")?;
             let instance = linker
-                .instantiate(&mut store, &module)
+                .instantiate_async(&mut store, &module)
+                .await
                 .context("failed to instantiate preload module")?;
             linker
                 .instance(&mut store, name, instance)
@@ -266,7 +267,7 @@ async fn main() -> Result<()> {
         .wizer
         .run(&mut store, &input_wasm, async |store, module| {
             linker.define_unknown_imports_as_traps(module)?;
-            linker.instantiate(store, module)
+            linker.instantiate_async(store, module).await
         })
         .await?;
 
