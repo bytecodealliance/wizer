@@ -1,5 +1,5 @@
 [package]
-version = "11.0.1"
+version = "11.0.2"
 authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
 maintainers = ["Victor Adossi <vadossi@cosmonic.com>"]
 categories = ["command-line-utilities", "development-tools", "wasm"]
