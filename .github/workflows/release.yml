@@ -124,6 +124,11 @@ jobs:
           echo TAG=$name >> $GITHUB_ENV
         id: tagname
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '>=24'
+          registry-url: 'https://registry.npmjs.org'
+
       # ... and if this was an actual push (tag or `main`) then we publish a
       # new release. This'll automatically publish a tag release or update `dev`
       # with this `sha`. Note that `continue-on-error` is set here so if this hits
