@@ -3033,7 +3033,7 @@ dependencies = [
 
 [[package]]
 name = "wizer"
-version = "11.0.2"
+version = "11.0.3"
 dependencies = [
  "anyhow",
  "clap",
