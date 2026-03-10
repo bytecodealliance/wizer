@@ -112,8 +112,8 @@ for (const [packageName, info] of Object.entries(packages)) {
     }
 
     await decompress(
-        Buffer.from(downloadBytes), 
-        packageDirectory, 
+        Buffer.from(downloadBytes),
+        packageDirectory,
         {
             // Remove the leading directory from the extracted file.
             strip: 1,
@@ -137,7 +137,7 @@ export default location
 `
 }
 function packageJson(name, version, description, os, cpu) {
-    version = version.startsWith('v') ? version.replace('v','') : version
+    version = version.startsWith('v') ? version.replace('v','') : version;
     return JSON.stringify({
         name: `@bytecodealliance/${name}`,
         bin: {
@@ -147,6 +147,9 @@ function packageJson(name, version, description, os, cpu) {
         version,
         main: "index.js",
         description,
+        repository: {
+            url: "https://github.com/bytecodealliance/wizer",
+        },
         license: "Apache-2.0",
         preferUnplugged: false,
         os: [os],
