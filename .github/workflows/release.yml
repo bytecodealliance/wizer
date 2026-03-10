@@ -1,9 +1,13 @@
-name: Release
+name: release
+
 on:
   push:
-    branches: [main]
-    tags-ignore: [dev]
+    branches:
+      - main
+    tags-ignore:
+      - dev
   pull_request:
+
 defaults:
   run:
     shell: bash
