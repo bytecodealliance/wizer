@@ -1,0 +1,57 @@
+name: e2e
+
+on:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Ensure that the wizer binary works via componentize-js
+  componentize-js:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        examples:
+          - name: hello-world
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: ">=24"
+
+      - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+      - run: cargo build --features=cli --release
+
+      # TODO: Update to non-rc version of componentize-js once released
+      - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          key: ${{ runner.os }}-node-modules-${{ matrix.examples.folder }}-
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+          path: |
+            ./tests/fixtures/components/${{ matrix.examples.name }}/node_modules
+      - working-directory: |
+          tests/fixtures/components/${{ matrix.examples.name }}
+        run: |
+          if [ ! -d "node_modules/@bytecodealliance/componentize-js" ]; then
+              wget https://github.com/bytecodealliance/ComponentizeJS/releases/download/0.19.4-rc.0/bytecodealliance-componentize-js-0.19.4-rc.0.tgz;
+              npm install bytecodealliance-componentize-js-0.19.4-rc.0.tgz;
+          fi
+
+      - working-directory: |
+          tests/fixtures/components/${{ matrix.examples.name }}
+        run: |
+          npx componentize-js \
+              --wizer-bin=../../../../target/release/wizer \
+              -w wit \
+              -o component.wasm \
+              component.js

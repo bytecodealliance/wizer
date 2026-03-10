@@ -1,0 +1,9 @@
+package wizer:test;
+
+interface test {
+    run: func() -> string;
+}
+
+world component {
+    export test;
+}

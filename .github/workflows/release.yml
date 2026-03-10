@@ -1,14 +1,18 @@
-name: Release
+name: release
+
 on:
   push:
-    branches: [main]
-    tags-ignore: [dev]
+    branches:
+      - main
+    tags-ignore:
+      - dev
   pull_request:
+
 defaults:
   run:
     shell: bash
 
-permissions: none
+permissions: {}
 
 # Cancel any in-flight jobs for the same PR/branch so there's only one active
 # at a time
@@ -21,6 +25,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
+      actions: write
     strategy:
       matrix:
         include:
@@ -74,6 +79,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v2
       # Download all the artifacts that we'll be publishing. Should keep an eye on
