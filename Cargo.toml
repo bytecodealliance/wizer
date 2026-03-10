@@ -1,6 +1,7 @@
 [package]
-version = "11.0.0"
+version = "11.0.1"
 authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
+maintainers = ["Victor Adossi <vadossi@cosmonic.com>"]
 categories = ["command-line-utilities", "development-tools", "wasm"]
 description = "The WebAssembly Pre-Initializer"
 documentation = "https://docs.rs/wizer"
